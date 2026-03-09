@@ -1,5 +1,7 @@
 # garmin-data
 
+[![CI](https://github.com/lucywoodman/garmin-data/actions/workflows/ci.yml/badge.svg)](https://github.com/lucywoodman/garmin-data/actions/workflows/ci.yml)
+
 CLI tool to sync Garmin Connect health data to a local SQLite database.
 
 ## Setup

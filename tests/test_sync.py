@@ -6,6 +6,10 @@ from garmin_data.database import Database
 from garmin_data.sync import METRICS, sync_activities, sync_metrics
 
 
+def _noop_log(msg):
+    pass
+
+
 class TestMetricsConfig:
     def test_all_four_metrics_defined(self):
         assert set(METRICS.keys()) == {
@@ -37,7 +41,7 @@ class TestSyncMetrics:
         db = Database(":memory:")
         client = self._make_client()
 
-        sync_metrics(client, db, date(2026, 3, 9), date(2026, 3, 9))
+        sync_metrics(client, db, date(2026, 3, 9), date(2026, 3, 9), log=_noop_log)
 
         assert db.record_count() == 9
         summary = db.query("2026-03-09", "summary")
@@ -48,7 +52,7 @@ class TestSyncMetrics:
         db = Database(":memory:")
         client = self._make_client()
 
-        sync_metrics(client, db, date(2026, 3, 8), date(2026, 3, 9))
+        sync_metrics(client, db, date(2026, 3, 8), date(2026, 3, 9), log=_noop_log)
 
         # 2 days * 9 metrics = 18 records
         assert db.record_count() == 18
@@ -61,6 +65,7 @@ class TestSyncMetrics:
         sync_metrics(
             client, db, date(2026, 3, 9), date(2026, 3, 9),
             metric_names=["summary", "sleep"],
+            log=_noop_log,
         )
 
         assert db.record_count() == 2
@@ -73,8 +78,8 @@ class TestSyncMetrics:
         db = Database(":memory:")
         client = self._make_client()
 
-        sync_metrics(client, db, date(2026, 3, 9), date(2026, 3, 9))
-        sync_metrics(client, db, date(2026, 3, 9), date(2026, 3, 9))
+        sync_metrics(client, db, date(2026, 3, 9), date(2026, 3, 9), log=_noop_log)
+        sync_metrics(client, db, date(2026, 3, 9), date(2026, 3, 9), log=_noop_log)
 
         # Still 9 records, not 18
         assert db.record_count() == 9
@@ -84,7 +89,7 @@ class TestSyncMetrics:
         db = Database(":memory:")
         client = self._make_client()
 
-        sync_metrics(client, db, date(2026, 3, 9), date(2026, 3, 9))
+        sync_metrics(client, db, date(2026, 3, 9), date(2026, 3, 9), log=_noop_log)
 
         # 9 metrics, delay between each (8 sleeps for 9 calls)
         assert mock_sleep.call_count == 8
@@ -95,7 +100,7 @@ class TestSyncMetrics:
         db = Database(":memory:")
         client = self._make_client()
 
-        sync_metrics(client, db, date(2026, 3, 8), date(2026, 3, 9))
+        sync_metrics(client, db, date(2026, 3, 8), date(2026, 3, 9), log=_noop_log)
 
         assert db.get_sync_log("last_sync_date") == "2026-03-09"
 
@@ -121,6 +126,7 @@ class TestSyncMetrics:
         sync_metrics(
             client, db, date(2026, 3, 9), date(2026, 3, 9),
             metric_names=["summary"],
+            log=_noop_log,
         )
 
         # Should have retried after backoff
@@ -133,7 +139,7 @@ class TestSyncMetrics:
         db = Database(":memory:")
         client = self._make_client()
 
-        sync_metrics(client, db, date(2026, 3, 9), date(2026, 3, 9))
+        sync_metrics(client, db, date(2026, 3, 9), date(2026, 3, 9), log=_noop_log)
 
         client.get_user_summary.assert_called_with("2026-03-09")
         client.get_heart_rates.assert_called_with("2026-03-09")
@@ -144,6 +150,36 @@ class TestSyncMetrics:
         client.get_hrv_data.assert_called_with("2026-03-09")
         client.get_spo2_data.assert_called_with("2026-03-09")
         client.get_body_battery_events.assert_called_with("2026-03-09")
+
+    @patch("garmin_data.sync.time.sleep")
+    def test_logs_per_date_progress(self, mock_sleep):
+        db = Database(":memory:")
+        client = self._make_client()
+        messages = []
+
+        sync_metrics(client, db, date(2026, 3, 8), date(2026, 3, 9), log=messages.append)
+
+        assert "Syncing 2026-03-08..." in messages
+        assert "Syncing 2026-03-09..." in messages
+
+    @patch("garmin_data.sync.time.sleep")
+    def test_logs_warning_on_exhausted_retries(self, mock_sleep):
+        db = Database(":memory:")
+        client = self._make_client()
+
+        from garminconnect import GarminConnectTooManyRequestsError
+
+        client.get_user_summary.side_effect = GarminConnectTooManyRequestsError("429")
+        messages = []
+
+        sync_metrics(
+            client, db, date(2026, 3, 9), date(2026, 3, 9),
+            metric_names=["summary"],
+            log=messages.append,
+        )
+
+        assert any("skipped summary" in m for m in messages)
+        assert db.query("2026-03-09", "summary") is None
 
 
 class TestSyncActivities:
@@ -156,7 +192,7 @@ class TestSyncActivities:
             {"activityId": 2, "activityName": "Walk", "startTimeLocal": "2026-03-09 18:00:00"},
         ]
 
-        sync_activities(client, db, date(2026, 3, 9), date(2026, 3, 9))
+        sync_activities(client, db, date(2026, 3, 9), date(2026, 3, 9), log=_noop_log)
 
         assert db.activity_count() == 2
         assert db.query_activity(1) is not None
@@ -170,8 +206,8 @@ class TestSyncActivities:
             {"activityId": 1, "activityName": "Run", "startTimeLocal": "2026-03-09 07:00:00"},
         ]
 
-        sync_activities(client, db, date(2026, 3, 9), date(2026, 3, 9))
-        sync_activities(client, db, date(2026, 3, 9), date(2026, 3, 9))
+        sync_activities(client, db, date(2026, 3, 9), date(2026, 3, 9), log=_noop_log)
+        sync_activities(client, db, date(2026, 3, 9), date(2026, 3, 9), log=_noop_log)
 
         assert db.activity_count() == 1
 
@@ -183,7 +219,7 @@ class TestSyncActivities:
             {"activityId": 1, "activityName": "Run", "startTimeLocal": "2026-03-09 07:30:00"},
         ]
 
-        sync_activities(client, db, date(2026, 3, 9), date(2026, 3, 9))
+        sync_activities(client, db, date(2026, 3, 9), date(2026, 3, 9), log=_noop_log)
 
         rows = db.query_activities("2026-03-09")
         assert len(rows) == 1
@@ -194,7 +230,7 @@ class TestSyncActivities:
         client = MagicMock()
         client.get_activities_by_date.return_value = []
 
-        sync_activities(client, db, date(2026, 3, 9), date(2026, 3, 9))
+        sync_activities(client, db, date(2026, 3, 9), date(2026, 3, 9), log=_noop_log)
 
         assert db.activity_count() == 0
 
@@ -216,7 +252,46 @@ class TestSyncActivities:
 
         client.get_activities_by_date.side_effect = flaky_activities
 
-        sync_activities(client, db, date(2026, 3, 9), date(2026, 3, 9))
+        sync_activities(client, db, date(2026, 3, 9), date(2026, 3, 9), log=_noop_log)
 
         assert db.activity_count() == 1
         assert call(60) in mock_sleep.call_args_list
+
+    @patch("garmin_data.sync.time.sleep")
+    def test_logs_activities_progress(self, mock_sleep):
+        db = Database(":memory:")
+        client = MagicMock()
+        client.get_activities_by_date.return_value = []
+        messages = []
+
+        sync_activities(client, db, date(2026, 3, 9), date(2026, 3, 9), log=messages.append)
+
+        assert "Syncing activities..." in messages
+
+    @patch("garmin_data.sync.time.sleep")
+    def test_skips_activity_with_missing_date(self, mock_sleep):
+        db = Database(":memory:")
+        client = MagicMock()
+        client.get_activities_by_date.return_value = [
+            {"activityId": 1, "activityName": "Run"},
+        ]
+        messages = []
+
+        sync_activities(client, db, date(2026, 3, 9), date(2026, 3, 9), log=messages.append)
+
+        assert db.activity_count() == 0
+        assert any("skipped activity 1" in m for m in messages)
+
+    @patch("garmin_data.sync.time.sleep")
+    def test_skips_activity_with_malformed_date(self, mock_sleep):
+        db = Database(":memory:")
+        client = MagicMock()
+        client.get_activities_by_date.return_value = [
+            {"activityId": 1, "activityName": "Run", "startTimeLocal": "not-a-date"},
+        ]
+        messages = []
+
+        sync_activities(client, db, date(2026, 3, 9), date(2026, 3, 9), log=messages.append)
+
+        assert db.activity_count() == 0
+        assert any("skipped activity 1" in m for m in messages)

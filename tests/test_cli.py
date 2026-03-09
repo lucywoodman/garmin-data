@@ -2,6 +2,9 @@ import json
 import os
 import subprocess
 import sys
+from datetime import date
+
+from garmin_data.cli import build_parser, parse_date
 
 
 def run_cli(*args: str, env_override: dict | None = None) -> subprocess.CompletedProcess:
@@ -158,3 +161,63 @@ class TestLoginCommand:
         result = run_cli("login", env_override={"GARMIN_EMAIL": ""})
         assert result.returncode != 0
         assert "GARMIN_EMAIL" in result.stderr
+
+
+class TestParseDate:
+    def test_valid_date(self):
+        assert parse_date("2026-03-09") == date(2026, 3, 9)
+
+    def test_invalid_date_raises(self):
+        import argparse
+
+        try:
+            parse_date("not-a-date")
+            assert False, "Should have raised"
+        except argparse.ArgumentTypeError as e:
+            assert "not-a-date" in str(e)
+
+
+class TestBuildParser:
+    def test_has_all_commands(self):
+        parser = build_parser()
+        # Parse each command to verify they exist
+        args = parser.parse_args(["login"])
+        assert args.command == "login"
+
+        args = parser.parse_args(["sync"])
+        assert args.command == "sync"
+
+        args = parser.parse_args(["status"])
+        assert args.command == "status"
+
+        args = parser.parse_args(["query", "2026-03-09"])
+        assert args.command == "query"
+
+        args = parser.parse_args(["activities", "2026-03-09"])
+        assert args.command == "activities"
+
+    def test_sync_metrics_help_lists_available(self):
+        parser = build_parser()
+        # Get the sync subparser's --metrics action
+        sync_action = None
+        for action in parser._subparsers._actions:
+            if hasattr(action, "_parser_class"):
+                for name, subparser in action.choices.items():
+                    if name == "sync":
+                        for a in subparser._actions:
+                            if "--metrics" in getattr(a, "option_strings", []):
+                                sync_action = a
+        assert sync_action is not None
+        assert "summary" in sync_action.help
+        assert "body_battery" in sync_action.help
+
+    def test_no_command_returns_none(self):
+        parser = build_parser()
+        args = parser.parse_args([])
+        assert args.command is None
+
+    def test_sync_parses_date_args(self):
+        parser = build_parser()
+        args = parser.parse_args(["sync", "--start", "2026-03-01", "--end", "2026-03-09"])
+        assert args.start == date(2026, 3, 1)
+        assert args.end == date(2026, 3, 9)

@@ -1,5 +1,6 @@
 import time
-from datetime import date, timedelta
+from collections.abc import Callable
+from datetime import date, datetime, timedelta
 
 from garminconnect import GarminConnectTooManyRequestsError
 
@@ -28,11 +29,13 @@ def sync_metrics(
     start: date,
     end: date,
     metric_names: list[str] | None = None,
+    log: Callable[[str], None] = print,
 ):
     metrics = {k: v for k, v in METRICS.items() if metric_names is None or k in metric_names}
     current = start
     while current <= end:
         date_str = current.isoformat()
+        log(f"Syncing {date_str}...")
         first_call = True
         for metric_name, method_name in metrics.items():
             if not first_call:
@@ -42,21 +45,44 @@ def sync_metrics(
             data = _fetch_with_retry(client, method_name, date_str)
             if data is not None:
                 db.upsert(date_str, metric_name, data)
+            else:
+                log(f"Warning: skipped {metric_name} for {date_str} (rate limited)")
 
         current += timedelta(days=1)
 
     db.set_sync_log("last_sync_date", end.isoformat())
 
 
-def sync_activities(client, db: Database, start: date, end: date):
+def sync_activities(
+    client,
+    db: Database,
+    start: date,
+    end: date,
+    log: Callable[[str], None] = print,
+):
+    log("Syncing activities...")
     activities = _fetch_activities_with_retry(client, start.isoformat(), end.isoformat())
     if activities is None:
+        log("Warning: skipped activities (rate limited)")
         return
     for activity in activities:
         activity_id = activity["activityId"]
-        activity_date = activity.get("startTimeLocal", "")[:10]
+        activity_date = _parse_activity_date(activity)
+        if activity_date is None:
+            log(f"Warning: skipped activity {activity_id} (missing or invalid date)")
+            continue
         db.upsert_activity(activity_id, activity_date, activity)
     db.set_sync_log("last_activity_sync_date", end.isoformat())
+
+
+def _parse_activity_date(activity: dict) -> str | None:
+    raw = activity.get("startTimeLocal")
+    if not raw:
+        return None
+    try:
+        return datetime.strptime(raw[:19], "%Y-%m-%d %H:%M:%S").date().isoformat()
+    except (ValueError, TypeError):
+        return None
 
 
 def _fetch_activities_with_retry(client, start: str, end: str) -> list | None:
