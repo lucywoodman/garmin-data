@@ -48,6 +48,27 @@ def sync_metrics(
     db.set_sync_log("last_sync_date", end.isoformat())
 
 
+def sync_activities(client, db: Database, start: date, end: date):
+    activities = _fetch_activities_with_retry(client, start.isoformat(), end.isoformat())
+    if activities is None:
+        return
+    for activity in activities:
+        activity_id = activity["activityId"]
+        activity_date = activity.get("startTimeLocal", "")[:10]
+        db.upsert_activity(activity_id, activity_date, activity)
+    db.set_sync_log("last_activity_sync_date", end.isoformat())
+
+
+def _fetch_activities_with_retry(client, start: str, end: str) -> list | None:
+    for attempt in range(MAX_RETRIES):
+        try:
+            return client.get_activities_by_date(start, end)
+        except GarminConnectTooManyRequestsError:
+            if attempt < MAX_RETRIES - 1:
+                time.sleep(BACKOFF_DELAY)
+    return None
+
+
 def _fetch_with_retry(client, method_name: str, date_str: str) -> dict | None:
     for attempt in range(MAX_RETRIES):
         try:

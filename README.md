@@ -31,13 +31,16 @@ garmin-data sync --start 2026-03-01 --end 2026-03-07    # Date range
 garmin-data sync --metrics steps,sleep                  # Specific metrics only
 ```
 
-Available metrics: `summary`, `heart_rate`, `rhr`, `sleep`
+Available metrics: `summary`, `heart_rate`, `rhr`, `sleep`, `steps`, `stress`, `hrv`, `spo2`, `body_battery`
+
+Sync also fetches activities automatically for the same date range.
 
 ### Status
 
 ```bash
 garmin-data status
-# Records: 28
+# Health records: 63
+# Activities: 5
 # Last sync: 2026-03-09
 ```
 
@@ -46,6 +49,12 @@ garmin-data status
 ```bash
 garmin-data query 2026-03-09                  # All metrics for a date
 garmin-data query 2026-03-09 --metric sleep   # Single metric
+```
+
+### Activities
+
+```bash
+garmin-data activities 2026-03-09             # Show activities for a date
 ```
 
 ## Configuration

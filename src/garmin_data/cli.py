@@ -53,6 +53,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("status", help="Show sync status and record counts")
 
+    activities = subparsers.add_parser("activities", help="Show activities for a date")
+    activities.add_argument("date", type=parse_date, help="Date to query (YYYY-MM-DD)")
+
     query = subparsers.add_parser("query", help="Query stored data for a date")
     query.add_argument("date", type=parse_date, help="Date to query (YYYY-MM-DD)")
     query.add_argument("--metric", type=str, default=None, help="Specific metric to show")
@@ -74,7 +77,7 @@ def cmd_login(email: str):
 
 def cmd_sync(args, email: str):
     from garmin_data.auth import resume_session
-    from garmin_data.sync import METRICS, sync_metrics
+    from garmin_data.sync import METRICS, sync_activities, sync_metrics
 
     client = resume_session(email)
     if client is None:
@@ -96,14 +99,31 @@ def cmd_sync(args, email: str):
     db = get_db()
     print(f"Syncing {start} to {end}...")
     sync_metrics(client, db, start, end, metric_names=metric_names)
-    print(f"Done. {db.record_count()} total records in database.")
+    sync_activities(client, db, start, end)
+    print(f"Done. {db.record_count()} health records, {db.activity_count()} activities in database.")
+
+
+def cmd_activities(args):
+    db = get_db()
+    date_str = args.date.isoformat()
+    rows = db.query_activities(date_str)
+    if not rows:
+        print(f"No activities for {date_str}")
+        return
+    for row in rows:
+        data = json.loads(row["data"])
+        print(f"{data.get('activityName', 'Unknown')}:")
+        print(json.dumps(data, indent=2))
+        print()
 
 
 def cmd_status():
     db = get_db()
     count = db.record_count()
+    activities = db.activity_count()
     last_sync = db.get_sync_log("last_sync_date")
-    print(f"Records: {count}")
+    print(f"Health records: {count}")
+    print(f"Activities: {activities}")
     print(f"Last sync: {last_sync or 'never'}")
 
 
@@ -145,6 +165,8 @@ def main():
     elif args.command == "sync":
         email = get_email()
         cmd_sync(args, email)
+    elif args.command == "activities":
+        cmd_activities(args)
     elif args.command == "status":
         cmd_status()
     elif args.command == "query":

@@ -19,6 +19,13 @@ class Database:
                 PRIMARY KEY (date, metric)
             );
 
+            CREATE TABLE IF NOT EXISTS activities (
+                activity_id INTEGER PRIMARY KEY,
+                date TEXT NOT NULL,
+                data TEXT NOT NULL,
+                synced_at REAL NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS sync_log (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
@@ -62,6 +69,31 @@ class Database:
             (key,),
         ).fetchone()
         return row["value"] if row else None
+
+    def upsert_activity(self, activity_id: int, date: str, data: dict):
+        self.conn.execute(
+            "INSERT OR REPLACE INTO activities (activity_id, date, data, synced_at) VALUES (?, ?, ?, ?)",
+            (activity_id, date, json.dumps(data), time.time()),
+        )
+        self.conn.commit()
+
+    def query_activity(self, activity_id: int) -> dict | None:
+        row = self.conn.execute(
+            "SELECT * FROM activities WHERE activity_id = ?",
+            (activity_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def query_activities(self, date: str) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM activities WHERE date = ? ORDER BY activity_id",
+            (date,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def activity_count(self) -> int:
+        row = self.conn.execute("SELECT COUNT(*) as count FROM activities").fetchone()
+        return row["count"]
 
     def record_count(self) -> int:
         row = self.conn.execute("SELECT COUNT(*) as count FROM health_data").fetchone()

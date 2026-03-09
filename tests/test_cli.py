@@ -124,6 +124,35 @@ class TestQueryCommand:
         assert result.returncode != 0
 
 
+class TestActivitiesCommand:
+    def test_activities_shows_data(self, tmp_path):
+        from garmin_data.database import Database
+
+        db_path = tmp_path / "test.db"
+        db = Database(str(db_path))
+        db.upsert_activity(1, "2026-03-09", {"activityName": "Morning Run", "distance": 5000})
+
+        result = run_cli(
+            "activities", "2026-03-09",
+            env_override={"GARMIN_DB_PATH": str(db_path)},
+        )
+        assert result.returncode == 0
+        assert "Morning Run" in result.stdout
+
+    def test_activities_no_data(self, tmp_path):
+        db_path = tmp_path / "test.db"
+        result = run_cli(
+            "activities", "2026-03-09",
+            env_override={"GARMIN_DB_PATH": str(db_path)},
+        )
+        assert result.returncode == 0
+        assert "No activities" in result.stdout
+
+    def test_activities_requires_date(self):
+        result = run_cli("activities")
+        assert result.returncode != 0
+
+
 class TestLoginCommand:
     def test_login_requires_garmin_email(self):
         result = run_cli("login", env_override={"GARMIN_EMAIL": ""})

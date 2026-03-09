@@ -101,6 +101,50 @@ class TestRecordCount:
         assert db.record_count() == 2
 
 
+class TestActivities:
+    def test_creates_activities_table(self):
+        db = Database(":memory:")
+        tables = db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        table_names = [t[0] for t in tables]
+        assert "activities" in table_names
+
+    def test_upsert_activity(self):
+        db = Database(":memory:")
+        activity = {"activityId": 123, "activityName": "Morning Run", "distance": 5000}
+        db.upsert_activity(123, "2026-03-09", activity)
+
+        row = db.query_activity(123)
+        assert row is not None
+        assert json.loads(row["data"])["activityName"] == "Morning Run"
+
+    def test_upsert_activity_replaces(self):
+        db = Database(":memory:")
+        db.upsert_activity(123, "2026-03-09", {"activityName": "Run"})
+        db.upsert_activity(123, "2026-03-09", {"activityName": "Morning Run"})
+
+        row = db.query_activity(123)
+        assert json.loads(row["data"])["activityName"] == "Morning Run"
+
+    def test_query_activities_by_date(self):
+        db = Database(":memory:")
+        db.upsert_activity(1, "2026-03-09", {"activityName": "Run"})
+        db.upsert_activity(2, "2026-03-09", {"activityName": "Walk"})
+        db.upsert_activity(3, "2026-03-10", {"activityName": "Swim"})
+
+        rows = db.query_activities("2026-03-09")
+        assert len(rows) == 2
+
+    def test_query_activity_missing(self):
+        db = Database(":memory:")
+        assert db.query_activity(999) is None
+
+    def test_activity_count(self):
+        db = Database(":memory:")
+        assert db.activity_count() == 0
+        db.upsert_activity(1, "2026-03-09", {"activityName": "Run"})
+        assert db.activity_count() == 1
+
+
 class TestFilePath:
     def test_creates_db_file(self, tmp_path):
         db_path = tmp_path / "test.db"

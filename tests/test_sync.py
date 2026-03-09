@@ -3,7 +3,7 @@ from datetime import date
 from unittest.mock import MagicMock, call, patch
 
 from garmin_data.database import Database
-from garmin_data.sync import METRICS, sync_metrics
+from garmin_data.sync import METRICS, sync_activities, sync_metrics
 
 
 class TestMetricsConfig:
@@ -144,3 +144,79 @@ class TestSyncMetrics:
         client.get_hrv_data.assert_called_with("2026-03-09")
         client.get_spo2_data.assert_called_with("2026-03-09")
         client.get_body_battery_events.assert_called_with("2026-03-09")
+
+
+class TestSyncActivities:
+    @patch("garmin_data.sync.time.sleep")
+    def test_syncs_activities(self, mock_sleep):
+        db = Database(":memory:")
+        client = MagicMock()
+        client.get_activities_by_date.return_value = [
+            {"activityId": 1, "activityName": "Run", "startTimeLocal": "2026-03-09 07:00:00"},
+            {"activityId": 2, "activityName": "Walk", "startTimeLocal": "2026-03-09 18:00:00"},
+        ]
+
+        sync_activities(client, db, date(2026, 3, 9), date(2026, 3, 9))
+
+        assert db.activity_count() == 2
+        assert db.query_activity(1) is not None
+        assert db.query_activity(2) is not None
+
+    @patch("garmin_data.sync.time.sleep")
+    def test_idempotent_activity_sync(self, mock_sleep):
+        db = Database(":memory:")
+        client = MagicMock()
+        client.get_activities_by_date.return_value = [
+            {"activityId": 1, "activityName": "Run", "startTimeLocal": "2026-03-09 07:00:00"},
+        ]
+
+        sync_activities(client, db, date(2026, 3, 9), date(2026, 3, 9))
+        sync_activities(client, db, date(2026, 3, 9), date(2026, 3, 9))
+
+        assert db.activity_count() == 1
+
+    @patch("garmin_data.sync.time.sleep")
+    def test_extracts_date_from_start_time(self, mock_sleep):
+        db = Database(":memory:")
+        client = MagicMock()
+        client.get_activities_by_date.return_value = [
+            {"activityId": 1, "activityName": "Run", "startTimeLocal": "2026-03-09 07:30:00"},
+        ]
+
+        sync_activities(client, db, date(2026, 3, 9), date(2026, 3, 9))
+
+        rows = db.query_activities("2026-03-09")
+        assert len(rows) == 1
+
+    @patch("garmin_data.sync.time.sleep")
+    def test_handles_empty_activities(self, mock_sleep):
+        db = Database(":memory:")
+        client = MagicMock()
+        client.get_activities_by_date.return_value = []
+
+        sync_activities(client, db, date(2026, 3, 9), date(2026, 3, 9))
+
+        assert db.activity_count() == 0
+
+    @patch("garmin_data.sync.time.sleep")
+    def test_429_retries_on_activities(self, mock_sleep):
+        db = Database(":memory:")
+        client = MagicMock()
+
+        from garminconnect import GarminConnectTooManyRequestsError
+
+        call_count = 0
+
+        def flaky_activities(startdate, enddate):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise GarminConnectTooManyRequestsError("429")
+            return [{"activityId": 1, "activityName": "Run", "startTimeLocal": "2026-03-09 07:00:00"}]
+
+        client.get_activities_by_date.side_effect = flaky_activities
+
+        sync_activities(client, db, date(2026, 3, 9), date(2026, 3, 9))
+
+        assert db.activity_count() == 1
+        assert call(60) in mock_sleep.call_args_list
