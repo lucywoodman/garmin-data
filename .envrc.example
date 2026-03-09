@@ -1,0 +1,2 @@
+export GARMIN_EMAIL=your.email@example.com
+export GARMIN_DB_PATH=~/.local/share/garmin-data/garmin.db

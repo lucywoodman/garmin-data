@@ -1,0 +1,24 @@
+[project]
+name = "garmin-data"
+version = "0.1.0"
+description = "CLI tool to sync Garmin Connect data to a local SQLite database"
+readme = "README.md"
+authors = [
+    { name = "Lucy Woodman", email = "garmin-data@woodman.email" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "garminconnect>=0.2.25",
+]
+
+[project.scripts]
+garmin-data = "garmin_data.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.9.13,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
