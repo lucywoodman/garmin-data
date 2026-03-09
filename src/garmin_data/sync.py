@@ -10,6 +10,11 @@ METRICS = {
     "heart_rate": "get_heart_rates",
     "rhr": "get_rhr_day",
     "sleep": "get_sleep_data",
+    "steps": "get_steps_data",
+    "stress": "get_stress_data",
+    "hrv": "get_hrv_data",
+    "spo2": "get_spo2_data",
+    "body_battery": "get_body_battery_events",
 }
 
 RATE_LIMIT_DELAY = 0.5

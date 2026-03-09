@@ -8,7 +8,10 @@ from garmin_data.sync import METRICS, sync_metrics
 
 class TestMetricsConfig:
     def test_all_four_metrics_defined(self):
-        assert set(METRICS.keys()) == {"summary", "heart_rate", "rhr", "sleep"}
+        assert set(METRICS.keys()) == {
+            "summary", "heart_rate", "rhr", "sleep",
+            "steps", "stress", "hrv", "spo2", "body_battery",
+        }
 
     def test_each_metric_has_api_method(self):
         for name, method_name in METRICS.items():
@@ -22,6 +25,11 @@ class TestSyncMetrics:
         client.get_heart_rates.return_value = {"heartRateValues": [70, 80]}
         client.get_rhr_day.return_value = {"restingHeartRate": 55}
         client.get_sleep_data.return_value = {"sleepDuration": 28800}
+        client.get_steps_data.return_value = {"steps": [{"startGMT": "08:00", "steps": 500}]}
+        client.get_stress_data.return_value = {"stressLevel": 25}
+        client.get_hrv_data.return_value = {"hrvSummary": {"weeklyAvg": 45}}
+        client.get_spo2_data.return_value = {"averageSpO2": 96}
+        client.get_body_battery_events.return_value = {"bodyBattery": 75}
         return client
 
     @patch("garmin_data.sync.time.sleep")
@@ -31,7 +39,7 @@ class TestSyncMetrics:
 
         sync_metrics(client, db, date(2026, 3, 9), date(2026, 3, 9))
 
-        assert db.record_count() == 4
+        assert db.record_count() == 9
         summary = db.query("2026-03-09", "summary")
         assert json.loads(summary["data"])["totalSteps"] == 8000
 
@@ -42,8 +50,8 @@ class TestSyncMetrics:
 
         sync_metrics(client, db, date(2026, 3, 8), date(2026, 3, 9))
 
-        # 2 days * 4 metrics = 8 records
-        assert db.record_count() == 8
+        # 2 days * 9 metrics = 18 records
+        assert db.record_count() == 18
 
     @patch("garmin_data.sync.time.sleep")
     def test_syncs_specific_metrics(self, mock_sleep):
@@ -68,8 +76,8 @@ class TestSyncMetrics:
         sync_metrics(client, db, date(2026, 3, 9), date(2026, 3, 9))
         sync_metrics(client, db, date(2026, 3, 9), date(2026, 3, 9))
 
-        # Still 4 records, not 8
-        assert db.record_count() == 4
+        # Still 9 records, not 18
+        assert db.record_count() == 9
 
     @patch("garmin_data.sync.time.sleep")
     def test_rate_limit_delay_between_calls(self, mock_sleep):
@@ -78,8 +86,8 @@ class TestSyncMetrics:
 
         sync_metrics(client, db, date(2026, 3, 9), date(2026, 3, 9))
 
-        # 4 metrics, delay between each (3 sleeps for 4 calls)
-        assert mock_sleep.call_count == 3
+        # 9 metrics, delay between each (8 sleeps for 9 calls)
+        assert mock_sleep.call_count == 8
         mock_sleep.assert_called_with(0.5)
 
     @patch("garmin_data.sync.time.sleep")
@@ -131,3 +139,8 @@ class TestSyncMetrics:
         client.get_heart_rates.assert_called_with("2026-03-09")
         client.get_rhr_day.assert_called_with("2026-03-09")
         client.get_sleep_data.assert_called_with("2026-03-09")
+        client.get_steps_data.assert_called_with("2026-03-09")
+        client.get_stress_data.assert_called_with("2026-03-09")
+        client.get_hrv_data.assert_called_with("2026-03-09")
+        client.get_spo2_data.assert_called_with("2026-03-09")
+        client.get_body_battery_events.assert_called_with("2026-03-09")

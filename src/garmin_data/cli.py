@@ -49,7 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
     sync = subparsers.add_parser("sync", help="Sync health data from Garmin")
     sync.add_argument("--start", type=parse_date, default=None, help="Start date (YYYY-MM-DD)")
     sync.add_argument("--end", type=parse_date, default=None, help="End date (YYYY-MM-DD)")
-    sync.add_argument("--metrics", type=str, default=None, help="Comma-separated metrics: summary,heart_rate,rhr,sleep")
+    sync.add_argument("--metrics", type=str, default=None, help="Comma-separated metrics: summary,heart_rate,rhr,sleep,steps,stress,hrv,spo2,body_battery")
 
     subparsers.add_parser("status", help="Show sync status and record counts")
 
