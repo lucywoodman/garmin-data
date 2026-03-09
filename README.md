@@ -53,10 +53,54 @@ garmin-data query 2026-03-09                  # All metrics for a date
 garmin-data query 2026-03-09 --metric sleep   # Single metric
 ```
 
+Output is JSON, so you can pipe it to `jq` for further processing:
+
+```bash
+garmin-data query 2026-03-09 --metric summary | tail -n +2 | jq '.totalSteps'
+```
+
 ### Activities
 
 ```bash
 garmin-data activities 2026-03-09             # Show activities for a date
+```
+
+## Example Use Cases
+
+### Daily sync via cron
+
+Add to your crontab to keep data up to date automatically:
+
+```bash
+# Sync yesterday's data every morning at 7am
+0 7 * * * GARMIN_EMAIL=you@example.com garmin-data sync --start $(date -v-1d +\%Y-\%m-\%d) --end $(date -v-1d +\%Y-\%m-\%d)
+```
+
+### Backfill historical data
+
+Sync a full month at a time to build up your local archive:
+
+```bash
+garmin-data sync --start 2026-01-01 --end 2026-01-31
+garmin-data sync --start 2026-02-01 --end 2026-02-28
+```
+
+### Check sleep and resting heart rate trends
+
+Pull just the metrics you care about, then extract fields with `jq`:
+
+```bash
+garmin-data sync --metrics sleep,rhr
+garmin-data query 2026-03-09 --metric rhr | tail -n +2 | jq '.restingHeartRate'
+```
+
+### Export a week of step counts
+
+```bash
+for d in 2026-03-{03..09}; do
+  steps=$(garmin-data query "$d" --metric steps 2>/dev/null | tail -n +2 | jq -r '.steps[0].steps // "N/A"')
+  echo "$d: $steps"
+done
 ```
 
 ## Configuration
