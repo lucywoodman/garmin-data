@@ -63,6 +63,9 @@ def build_parser() -> argparse.ArgumentParser:
     query.add_argument("date", type=parse_date, help="Date to query (YYYY-MM-DD)")
     query.add_argument("--metric", type=str, default=None, help="Specific metric to show")
 
+    daily = subparsers.add_parser("daily", help="Output daily log YAML for a date")
+    daily.add_argument("date", type=parse_date, help="Date to query (YYYY-MM-DD)")
+
     return parser
 
 
@@ -130,6 +133,59 @@ def cmd_status():
     print(f"Last sync: {last_sync or 'never'}")
 
 
+ACTIVITY_TYPE_MAP = {
+    "running": "run",
+    "swimming": "swim",
+    "pool_swimming": "swim",
+    "open_water_swimming": "swim",
+    "cycling": "bike",
+    "road_biking": "bike",
+    "mountain_biking": "bike",
+    "strength_training": "strength",
+    "hiking": "hill walk",
+}
+
+
+def cmd_daily(args):
+    db = get_db()
+    date_str = args.date.isoformat()
+    lines = []
+
+    sleep_row = db.query(date_str, "sleep")
+    if sleep_row:
+        data = json.loads(sleep_row["data"])
+        sleep_seconds = data.get("dailySleepDTO", {}).get("sleepTimeSeconds")
+        if sleep_seconds is not None:
+            lines.append(f"sleep_hours: {sleep_seconds / 3600:.2f}")
+
+    summary_row = db.query(date_str, "summary")
+    if summary_row:
+        data = json.loads(summary_row["data"])
+        steps = data.get("totalSteps")
+        if steps is not None:
+            lines.append(f"steps: {steps}")
+
+    activity_rows = db.query_activities(date_str)
+    best = None
+    for row in activity_rows:
+        data = json.loads(row["data"])
+        type_key = data.get("activityType", {}).get("typeKey", "")
+        mapped = ACTIVITY_TYPE_MAP.get(type_key)
+        if mapped is None:
+            continue
+        duration = data.get("duration", 0)
+        if best is None or duration > best[1]:
+            best = (mapped, duration)
+
+    if best:
+        exercise_type, duration_seconds = best
+        lines.append(f"exercise_type: {exercise_type}")
+        lines.append(f"exercise_duration: {round(duration_seconds / 60)}")
+
+    if lines:
+        print("\n".join(lines))
+
+
 def cmd_query(args):
     db = get_db()
     date_str = args.date.isoformat()
@@ -174,6 +230,8 @@ def main():
         cmd_status()
     elif args.command == "query":
         cmd_query(args)
+    elif args.command == "daily":
+        cmd_daily(args)
 
 
 if __name__ == "__main__":

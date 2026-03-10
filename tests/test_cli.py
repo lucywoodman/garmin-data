@@ -27,6 +27,7 @@ class TestNoCommand:
         assert "sync" in result.stdout
         assert "status" in result.stdout
         assert "query" in result.stdout
+        assert "daily" in result.stdout
 
 
 class TestSyncCommand:
@@ -156,6 +157,133 @@ class TestActivitiesCommand:
         assert result.returncode != 0
 
 
+class TestDailyCommand:
+    def test_daily_requires_date(self):
+        result = run_cli("daily")
+        assert result.returncode != 0
+
+    def test_daily_no_data(self, tmp_path):
+        db_path = tmp_path / "test.db"
+        result = run_cli(
+            "daily", "2026-03-09",
+            env_override={"GARMIN_DB_PATH": str(db_path)},
+        )
+        assert result.returncode == 0
+        assert result.stdout.strip() == ""
+
+    def test_daily_sleep_and_steps(self, tmp_path):
+        from garmin_data.database import Database
+
+        db_path = tmp_path / "test.db"
+        db = Database(str(db_path))
+        db.upsert("2026-03-09", "sleep", {
+            "dailySleepDTO": {"sleepTimeSeconds": 26100},
+        })
+        db.upsert("2026-03-09", "summary", {"totalSteps": 8432})
+
+        result = run_cli(
+            "daily", "2026-03-09",
+            env_override={"GARMIN_DB_PATH": str(db_path)},
+        )
+        assert result.returncode == 0
+        assert "sleep_hours: 7.25" in result.stdout
+        assert "steps: 8432" in result.stdout
+
+    def test_daily_sleep_only(self, tmp_path):
+        from garmin_data.database import Database
+
+        db_path = tmp_path / "test.db"
+        db = Database(str(db_path))
+        db.upsert("2026-03-09", "sleep", {
+            "dailySleepDTO": {"sleepTimeSeconds": 28800},
+        })
+
+        result = run_cli(
+            "daily", "2026-03-09",
+            env_override={"GARMIN_DB_PATH": str(db_path)},
+        )
+        assert result.returncode == 0
+        assert "sleep_hours: 8.00" in result.stdout
+        assert "steps" not in result.stdout
+
+    def test_daily_steps_only(self, tmp_path):
+        from garmin_data.database import Database
+
+        db_path = tmp_path / "test.db"
+        db = Database(str(db_path))
+        db.upsert("2026-03-09", "summary", {"totalSteps": 5000})
+
+        result = run_cli(
+            "daily", "2026-03-09",
+            env_override={"GARMIN_DB_PATH": str(db_path)},
+        )
+        assert result.returncode == 0
+        assert "steps: 5000" in result.stdout
+        assert "sleep_hours" not in result.stdout
+
+    def test_daily_with_qualifying_activity(self, tmp_path):
+        from garmin_data.database import Database
+
+        db_path = tmp_path / "test.db"
+        db = Database(str(db_path))
+        db.upsert_activity(1, "2026-03-09", {
+            "activityName": "Morning Run",
+            "activityType": {"typeKey": "running"},
+            "duration": 2520.0,
+        })
+
+        result = run_cli(
+            "daily", "2026-03-09",
+            env_override={"GARMIN_DB_PATH": str(db_path)},
+        )
+        assert result.returncode == 0
+        assert "exercise_type: run" in result.stdout
+        assert "exercise_duration: 42" in result.stdout
+
+    def test_daily_excludes_walking(self, tmp_path):
+        from garmin_data.database import Database
+
+        db_path = tmp_path / "test.db"
+        db = Database(str(db_path))
+        db.upsert_activity(1, "2026-03-09", {
+            "activityName": "Afternoon Walk",
+            "activityType": {"typeKey": "walking"},
+            "duration": 1800.0,
+        })
+
+        result = run_cli(
+            "daily", "2026-03-09",
+            env_override={"GARMIN_DB_PATH": str(db_path)},
+        )
+        assert result.returncode == 0
+        assert "exercise_type" not in result.stdout
+        assert "exercise_duration" not in result.stdout
+
+    def test_daily_picks_longest_activity(self, tmp_path):
+        from garmin_data.database import Database
+
+        db_path = tmp_path / "test.db"
+        db = Database(str(db_path))
+        db.upsert_activity(1, "2026-03-09", {
+            "activityName": "Short Run",
+            "activityType": {"typeKey": "running"},
+            "duration": 600.0,
+        })
+        db.upsert_activity(2, "2026-03-09", {
+            "activityName": "Long Bike",
+            "activityType": {"typeKey": "cycling"},
+            "duration": 3600.0,
+        })
+
+        result = run_cli(
+            "daily", "2026-03-09",
+            env_override={"GARMIN_DB_PATH": str(db_path)},
+        )
+        assert result.returncode == 0
+        assert "exercise_type: bike" in result.stdout
+        assert "exercise_duration: 60" in result.stdout
+
+
 class TestLoginCommand:
     def test_login_requires_garmin_email(self):
         result = run_cli("login", env_override={"GARMIN_EMAIL": ""})
@@ -195,6 +323,9 @@ class TestBuildParser:
 
         args = parser.parse_args(["activities", "2026-03-09"])
         assert args.command == "activities"
+
+        args = parser.parse_args(["daily", "2026-03-09"])
+        assert args.command == "daily"
 
     def test_sync_metrics_help_lists_available(self):
         parser = build_parser()
