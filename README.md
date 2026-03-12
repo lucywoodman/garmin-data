@@ -10,6 +10,8 @@ CLI tool to sync Garmin Connect health data to a local SQLite database.
 cp .envrc.example .envrc
 # Edit .envrc with your Garmin email
 direnv allow
+
+uv tool install .
 ```
 
 ## Usage
@@ -65,6 +67,18 @@ garmin-data query 2026-03-09 --metric summary | tail -n +2 | jq '.totalSteps'
 garmin-data activities 2026-03-09             # Show activities for a date
 ```
 
+### Daily
+
+Output a YAML-formatted daily log for a date, pulling sleep, steps, and exercise data.
+
+```bash
+garmin-data daily 2026-03-09
+# sleep_hours: 7.25
+# steps: 8432
+# exercise_type: run
+# exercise_duration: 45
+```
+
 ## Example Use Cases
 
 ### Daily sync via cron
@@ -115,4 +129,5 @@ done
 ```bash
 uv sync
 uv run pytest
+uv tool install . --reinstall  # Re-install CLI after code changes
 ```
