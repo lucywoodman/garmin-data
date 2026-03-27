@@ -360,6 +360,72 @@ class TestExtractDaily:
         result = extract_daily(db, "2026-03-09")
         assert result["exercise_type"] == "hill_walk"
 
+    def test_extracts_biometrics(self):
+        from garmin_data.database import Database
+
+        db = Database(":memory:")
+        db.upsert("2026-03-09", "summary", {
+            "totalSteps": 10766,
+            "bodyBatteryAtWakeTime": 77,
+            "bodyBatteryHighestValue": 77,
+            "bodyBatteryLowestValue": 45,
+            "averageStressLevel": 21,
+            "maxStressLevel": 72,
+            "activeKilocalories": 378.0,
+            "floorsAscended": 29.36,
+        })
+        db.upsert("2026-03-09", "rhr", {
+            "allMetrics": {
+                "metricsMap": {
+                    "WELLNESS_RESTING_HEART_RATE": [
+                        {"value": 60.0, "calendarDate": "2026-03-09"}
+                    ]
+                }
+            },
+        })
+        db.upsert("2026-03-09", "hrv", {
+            "hrvSummary": {
+                "weeklyAvg": 42,
+                "lastNightAvg": 41,
+                "status": "LOW",
+            },
+        })
+        db.upsert("2026-03-09", "spo2", {
+            "averageSpO2": 98.0,
+            "lowestSpO2": 90,
+        })
+
+        from garmin_data.cli import extract_daily
+
+        result = extract_daily(db, "2026-03-09")
+        assert result["steps"] == 10766
+        assert result["resting_heart_rate"] == 60.0
+        assert result["body_battery_at_wake"] == 77
+        assert result["body_battery_highest"] == 77
+        assert result["body_battery_lowest"] == 45
+        assert result["hrv_weekly_avg"] == 42
+        assert result["hrv_last_night_avg"] == 41
+        assert result["hrv_status"] == "LOW"
+        assert result["stress_avg"] == 21
+        assert result["stress_max"] == 72
+        assert result["spo2_avg"] == 98.0
+        assert result["spo2_lowest"] == 90
+        assert result["active_calories"] == 378.0
+        assert result["floors_ascended"] == 29.36
+
+    def test_biometrics_missing_gracefully(self):
+        from garmin_data.database import Database
+
+        db = Database(":memory:")
+        db.upsert("2026-03-09", "summary", {"totalSteps": 5000})
+
+        from garmin_data.cli import extract_daily
+
+        result = extract_daily(db, "2026-03-09")
+        assert result["steps"] == 5000
+        assert "resting_heart_rate" not in result
+        assert "hrv_status" not in result
+
 
 class TestPushCommand:
     def test_push_requires_genki_env_vars(self):

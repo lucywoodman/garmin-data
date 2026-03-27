@@ -165,9 +165,46 @@ def extract_daily(db: Database, date_str: str) -> dict | None:
     summary_row = db.query(date_str, "summary")
     if summary_row:
         data = json.loads(summary_row["data"])
-        steps = data.get("totalSteps")
-        if steps is not None:
-            result["steps"] = steps
+        summary_fields = {
+            "steps": "totalSteps",
+            "body_battery_at_wake": "bodyBatteryAtWakeTime",
+            "body_battery_highest": "bodyBatteryHighestValue",
+            "body_battery_lowest": "bodyBatteryLowestValue",
+            "stress_avg": "averageStressLevel",
+            "stress_max": "maxStressLevel",
+            "active_calories": "activeKilocalories",
+            "floors_ascended": "floorsAscended",
+        }
+        for target, source in summary_fields.items():
+            value = data.get(source)
+            if value is not None:
+                result[target] = value
+
+    rhr_row = db.query(date_str, "rhr")
+    if rhr_row:
+        data = json.loads(rhr_row["data"])
+        try:
+            metrics = data["allMetrics"]["metricsMap"]["WELLNESS_RESTING_HEART_RATE"]
+            result["resting_heart_rate"] = metrics[0]["value"]
+        except (KeyError, IndexError):
+            pass
+
+    hrv_row = db.query(date_str, "hrv")
+    if hrv_row:
+        data = json.loads(hrv_row["data"])
+        summary = data.get("hrvSummary", {})
+        for target, source in [("hrv_weekly_avg", "weeklyAvg"), ("hrv_last_night_avg", "lastNightAvg"), ("hrv_status", "status")]:
+            value = summary.get(source)
+            if value is not None:
+                result[target] = value
+
+    spo2_row = db.query(date_str, "spo2")
+    if spo2_row:
+        data = json.loads(spo2_row["data"])
+        for target, source in [("spo2_avg", "averageSpO2"), ("spo2_lowest", "lowestSpO2")]:
+            value = data.get(source)
+            if value is not None:
+                result[target] = value
 
     activity_rows = db.query_activities(date_str)
     best = None
@@ -224,7 +261,7 @@ def cmd_push(args, email: str):
 
     db = get_db()
     print(f"Syncing {start} to {end}...")
-    sync_metrics(client, db, start, end, metric_names=["summary", "sleep"])
+    sync_metrics(client, db, start, end)
     sync_activities(client, db, start, end)
 
     current = start
