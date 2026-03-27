@@ -1,2 +1,4 @@
 export GARMIN_EMAIL=your.email@example.com
 export GARMIN_DB_PATH=~/.local/share/garmin-data/garmin.db
+export GENKI_URL=https://your-cloud-run-url.run.app
+export GENKI_PASSWORD=your-app-password

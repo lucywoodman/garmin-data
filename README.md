@@ -79,11 +79,32 @@ garmin-data daily 2026-03-09
 # exercise_duration: 45
 ```
 
+### Push
+
+Sync from Garmin and push daily summaries to [Genki Tracker](https://github.com/lucywoodman/health-tracker). Requires `GENKI_URL` and `GENKI_PASSWORD` environment variables.
+
+```bash
+garmin-data push                                        # Yesterday + today
+garmin-data push --start 2026-03-01                     # From date to today
+garmin-data push --start 2026-03-01 --end 2026-03-07    # Date range
+```
+
+Only syncs the `summary`, `sleep`, and `activities` metrics needed for the daily data.
+
 ## Example Use Cases
+
+### Push to Genki Tracker via cron
+
+Add to your crontab to sync and push twice a day:
+
+```bash
+# Push yesterday + today at 7am and 9pm
+0 7,21 * * * garmin-data push
+```
 
 ### Daily sync via cron
 
-Add to your crontab to keep data up to date automatically:
+Add to your crontab to keep the local database up to date:
 
 ```bash
 # Sync yesterday's data every morning at 7am
@@ -121,8 +142,10 @@ done
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
-| `GARMIN_EMAIL` | Garmin Connect email | *(required for login/sync)* |
+| `GARMIN_EMAIL` | Garmin Connect email | *(required for login/sync/push)* |
 | `GARMIN_DB_PATH` | SQLite database path | `~/.local/share/garmin-data/garmin.db` |
+| `GENKI_URL` | Genki Tracker URL | *(required for push)* |
+| `GENKI_PASSWORD` | Genki Tracker password | *(required for push)* |
 
 ## Development
 

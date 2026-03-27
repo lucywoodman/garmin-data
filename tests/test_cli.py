@@ -305,6 +305,87 @@ class TestParseDate:
             assert "not-a-date" in str(e)
 
 
+class TestExtractDaily:
+    def test_extracts_sleep_and_steps(self):
+        from garmin_data.database import Database
+
+        db = Database(":memory:")
+        db.upsert("2026-03-09", "sleep", {
+            "dailySleepDTO": {"sleepTimeSeconds": 26100},
+        })
+        db.upsert("2026-03-09", "summary", {"totalSteps": 8432})
+
+        from garmin_data.cli import extract_daily
+
+        result = extract_daily(db, "2026-03-09")
+        assert result["date"] == "2026-03-09"
+        assert result["sleep_hours"] == 7.25
+        assert result["steps"] == 8432
+
+    def test_extracts_exercise(self):
+        from garmin_data.database import Database
+
+        db = Database(":memory:")
+        db.upsert_activity(1, "2026-03-09", {
+            "activityType": {"typeKey": "running"},
+            "duration": 2520.0,
+        })
+
+        from garmin_data.cli import extract_daily
+
+        result = extract_daily(db, "2026-03-09")
+        assert result["exercise_type"] == "run"
+        assert result["exercise_duration"] == 42
+
+    def test_returns_none_when_no_data(self):
+        from garmin_data.database import Database
+
+        db = Database(":memory:")
+
+        from garmin_data.cli import extract_daily
+
+        assert extract_daily(db, "2026-03-09") is None
+
+    def test_hiking_maps_to_hill_walk(self):
+        from garmin_data.database import Database
+
+        db = Database(":memory:")
+        db.upsert_activity(1, "2026-03-09", {
+            "activityType": {"typeKey": "hiking"},
+            "duration": 3600.0,
+        })
+
+        from garmin_data.cli import extract_daily
+
+        result = extract_daily(db, "2026-03-09")
+        assert result["exercise_type"] == "hill_walk"
+
+
+class TestPushCommand:
+    def test_push_requires_genki_env_vars(self):
+        result = run_cli(
+            "push",
+            env_override={
+                "GARMIN_EMAIL": "test@example.com",
+                "GENKI_URL": "",
+                "GENKI_PASSWORD": "",
+            },
+        )
+        assert result.returncode != 0
+        assert "GENKI_URL" in result.stderr
+
+    def test_push_appears_in_help(self):
+        result = run_cli()
+        assert "push" in result.stdout
+
+    def test_push_parses_date_args(self):
+        parser = build_parser()
+        args = parser.parse_args(["push", "--start", "2026-03-01", "--end", "2026-03-09"])
+        assert args.command == "push"
+        assert args.start == date(2026, 3, 1)
+        assert args.end == date(2026, 3, 9)
+
+
 class TestBuildParser:
     def test_has_all_commands(self):
         parser = build_parser()
@@ -326,6 +407,9 @@ class TestBuildParser:
 
         args = parser.parse_args(["daily", "2026-03-09"])
         assert args.command == "daily"
+
+        args = parser.parse_args(["push"])
+        assert args.command == "push"
 
     def test_sync_metrics_help_lists_available(self):
         parser = build_parser()
