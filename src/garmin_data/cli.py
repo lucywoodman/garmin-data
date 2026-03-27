@@ -87,7 +87,7 @@ def cmd_login(email: str):
 
 
 def cmd_sync(args, email: str):
-    from garmin_data.auth import resume_session
+    from garmin_data.auth import resume_session, save_session
     from garmin_data.sync import METRICS, sync_activities, sync_metrics
 
     client = resume_session(email)
@@ -111,6 +111,7 @@ def cmd_sync(args, email: str):
     print(f"Syncing {start} to {end}...")
     sync_metrics(client, db, start, end, metric_names=metric_names)
     sync_activities(client, db, start, end)
+    save_session(client)
     print(f"Done. {db.record_count()} health records, {db.activity_count()} activities in database.")
 
 
@@ -242,7 +243,7 @@ def cmd_daily(args):
 
 
 def cmd_push(args, email: str):
-    from garmin_data.auth import resume_session
+    from garmin_data.auth import resume_session, save_session
     from garmin_data.sync import sync_activities, sync_metrics
 
     genki_url = os.environ.get("GENKI_URL", "").rstrip("/")
@@ -274,6 +275,7 @@ def cmd_push(args, email: str):
             pushed += 1
         current += timedelta(days=1)
 
+    save_session(client)
     print(f"Done. Pushed {pushed} day(s) to Genki Tracker.")
 
 

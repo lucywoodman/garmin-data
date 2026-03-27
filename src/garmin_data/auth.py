@@ -28,3 +28,8 @@ def resume_session(email: str) -> Garmin | None:
     client = create_client(email)
     client.login(tokenstore=str(TOKEN_DIR))
     return client
+
+
+def save_session(client: Garmin):
+    TOKEN_DIR.mkdir(parents=True, exist_ok=True)
+    client.garth.dump(str(TOKEN_DIR))
