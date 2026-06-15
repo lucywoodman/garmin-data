@@ -11,3 +11,11 @@ wheels/
 
 # Environment variables
 .envrc
+
+# Claude Code local config
+.claude/
+
+# Go build output
+/bin/
+*.test
+*.out
