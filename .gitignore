@@ -14,3 +14,8 @@ wheels/
 
 # Claude Code local config
 .claude/
+
+# Go build output
+/bin/
+*.test
+*.out
