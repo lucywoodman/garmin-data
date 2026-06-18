@@ -73,6 +73,17 @@ var syncCmd = &cobra.Command{
 			return err
 		}
 
+		// Save tokens if they were refreshed during sync
+		if client.TokensUpdated() {
+			tokenDir, err := garminTokenDir()
+			if err != nil {
+				return fmt.Errorf("locate token dir: %w", err)
+			}
+			if err := client.Tokens().Save(tokenDir); err != nil {
+				return fmt.Errorf("save refreshed tokens: %w", err)
+			}
+		}
+
 		recs, _ := store.RecordCount()
 		acts, _ := store.ActivityCount()
 		fmt.Printf("Done. %d health records, %d activities in database.\n", recs, acts)

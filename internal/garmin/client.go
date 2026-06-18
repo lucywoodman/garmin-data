@@ -3,6 +3,7 @@ package garmin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,10 +21,11 @@ const (
 )
 
 type Client struct {
-	tokens      *Tokens
-	httpClient  *http.Client
-	apiBase     string
-	displayName string
+	tokens       *Tokens
+	httpClient   *http.Client
+	apiBase      string
+	displayName  string
+	tokenUpdated bool // tracks if tokens were refreshed this session
 }
 
 func NewClient(tokens *Tokens) *Client {
@@ -38,12 +40,34 @@ func (c *Client) Tokens() *Tokens {
 	return c.tokens
 }
 
+// TokensUpdated returns true if the tokens were refreshed during this session.
+// Callers should save the new tokens if this returns true.
+func (c *Client) TokensUpdated() bool {
+	return c.tokenUpdated
+}
+
 func (c *Client) WithAPIBase(url string) *Client {
 	c.apiBase = url
 	return c
 }
 
 func (c *Client) Get(ctx context.Context, path string, params url.Values) (json.RawMessage, error) {
+	body, err := c.get(ctx, path, params)
+	if err != nil && (isAuthError(err) && c.tokens.DIRefreshToken != "") {
+		// Attempt token refresh once on auth failure
+		refreshed, refreshErr := RefreshDIToken(ctx, c.tokens)
+		if refreshErr != nil {
+			return nil, fmt.Errorf("token refresh failed: %w (original: %v)", refreshErr, err)
+		}
+		c.tokens = refreshed
+		c.tokenUpdated = true
+		// Retry the request with new token
+		return c.get(ctx, path, params)
+	}
+	return body, err
+}
+
+func (c *Client) get(ctx context.Context, path string, params url.Values) (json.RawMessage, error) {
 	full := c.apiBase + path
 	if len(params) > 0 {
 		full += "?" + params.Encode()
@@ -75,6 +99,10 @@ func (c *Client) Get(ctx context.Context, path string, params url.Values) (json.
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
 	return body, nil
+}
+
+func isAuthError(err error) bool {
+	return errors.Is(err, ErrInvalidCredentials)
 }
 
 func (c *Client) setNativeHeaders(req *http.Request) {

@@ -64,7 +64,21 @@ func newTestServer(t *testing.T, state *ssoState) *httptest.Server {
 
 	mux.HandleFunc("/di-oauth2-service/oauth/token", func(w http.ResponseWriter, r *http.Request) {
 		_ = r.ParseForm()
+		grantType := r.PostFormValue("grant_type")
+
+		// For refresh_token grant, extract client_id from Authorization header
 		clientID := r.PostFormValue("client_id")
+		if grantType == "refresh_token" && clientID == "" {
+			auth := r.Header.Get("Authorization")
+			if basicCreds, ok := strings.CutPrefix(auth, "Basic "); ok {
+				decoded, _ := base64.StdEncoding.DecodeString(basicCreds)
+				parts := strings.Split(string(decoded), ":")
+				if len(parts) > 0 {
+					clientID = parts[0]
+				}
+			}
+		}
+
 		state.diCalls[clientID]++
 
 		if state.diStatus != http.StatusOK {
@@ -311,5 +325,57 @@ func TestLoginEmptyCredentials(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal("expected error for empty email")
+	}
+}
+
+func TestRefreshDIToken(t *testing.T) {
+	state := &ssoState{
+		diRefreshToken: "new-refresh-token",
+	}
+	srv := newTestServer(t, state)
+	defer srv.Close()
+
+	oldTokens := &Tokens{
+		DIToken:        "old-access-token",
+		DIRefreshToken: "old-refresh-token",
+		DIClientID:     "FIRST",
+	}
+
+	refreshed, err := refreshDITokenWith(context.Background(), oldTokens, testEndpoints(srv))
+	if err != nil {
+		t.Fatalf("RefreshDIToken: %v", err)
+	}
+	if refreshed.DIToken == "" {
+		t.Error("expected new access token")
+	}
+	if refreshed.DIRefreshToken != "new-refresh-token" {
+		t.Errorf("DIRefreshToken: want new-refresh-token, got %q", refreshed.DIRefreshToken)
+	}
+	if refreshed.DIClientID != "FIRST" {
+		t.Errorf("DIClientID: want FIRST (preserved), got %q", refreshed.DIClientID)
+	}
+}
+
+func TestRefreshDITokenMissingRefreshToken(t *testing.T) {
+	tokens := &Tokens{
+		DIToken:        "access",
+		DIRefreshToken: "",
+		DIClientID:     "CLIENT",
+	}
+	_, err := refreshDITokenWith(context.Background(), tokens, testEndpoints(httptest.NewServer(http.NewServeMux())))
+	if err == nil || !strings.Contains(err.Error(), "no refresh token") {
+		t.Fatalf("expected no refresh token error, got %v", err)
+	}
+}
+
+func TestRefreshDITokenMissingClientID(t *testing.T) {
+	tokens := &Tokens{
+		DIToken:        "access",
+		DIRefreshToken: "refresh",
+		DIClientID:     "",
+	}
+	_, err := refreshDITokenWith(context.Background(), tokens, testEndpoints(httptest.NewServer(http.NewServeMux())))
+	if err == nil || !strings.Contains(err.Error(), "no DI client ID") {
+		t.Fatalf("expected no DI client ID error, got %v", err)
 	}
 }

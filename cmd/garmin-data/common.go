@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,8 +28,12 @@ func openDB() (*db.DB, error) {
 	return db.Open(path)
 }
 
+func garminTokenDir() (string, error) {
+	return garmin.DefaultTokenDir()
+}
+
 func loadGarminClient() (*garmin.Client, error) {
-	dir, err := garmin.DefaultTokenDir()
+	dir, err := garminTokenDir()
 	if err != nil {
 		return nil, err
 	}
@@ -41,4 +46,18 @@ func loadGarminClient() (*garmin.Client, error) {
 
 func parseDateFlag(value string) (time.Time, error) {
 	return time.ParseInLocation(dateLayout, value, time.Local)
+}
+
+func printJSON(data []byte) {
+	var pretty any
+	if err := json.Unmarshal(data, &pretty); err != nil {
+		fmt.Printf("%s\n", string(data))
+		return
+	}
+	out, err := json.MarshalIndent(pretty, "", "  ")
+	if err != nil {
+		fmt.Printf("%s\n", string(data))
+		return
+	}
+	fmt.Printf("%s\n", out)
 }

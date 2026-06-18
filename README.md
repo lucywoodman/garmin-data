@@ -4,23 +4,31 @@
 
 CLI tool to sync Garmin Connect health data to a local SQLite database.
 
-## Setup
+## Installation
+
+**Requirements:** Go 1.23 or later
 
 ```bash
-cp .envrc.example .envrc
-# Edit .envrc with your Garmin email
-direnv allow
+go install github.com/lucywoodman/garmin-data/cmd/garmin-data@latest
+```
 
-uv tool install .
+Or build from source:
+
+```bash
+git clone https://github.com/lucywoodman/garmin-data.git
+cd garmin-data
+go build -o garmin-data ./cmd/garmin-data
+sudo mv garmin-data /usr/local/bin/  # Optional: install globally
 ```
 
 ## Usage
 
 ### Login
 
-Authenticate with Garmin Connect. Prompts for password interactively and handles MFA if enabled. Tokens are saved to `~/.garminconnect` and persist for ~1 year.
+Authenticate with Garmin Connect. Prompts for password interactively and handles MFA if enabled. Tokens are saved to `~/.garminconnect` and persist for ~1 year (automatically refreshed during long syncs).
 
 ```bash
+export GARMIN_EMAIL=your-email@example.com
 garmin-data login
 ```
 
@@ -58,7 +66,7 @@ garmin-data query 2026-03-09 --metric sleep   # Single metric
 Output is JSON, so you can pipe it to `jq` for further processing:
 
 ```bash
-garmin-data query 2026-03-09 --metric summary | tail -n +2 | jq '.totalSteps'
+garmin-data query 2026-03-09 --metric summary | jq '.totalSteps'
 ```
 
 ### Activities
@@ -69,7 +77,7 @@ garmin-data activities 2026-03-09             # Show activities for a date
 
 ### Daily
 
-Output a YAML-formatted daily log for a date, pulling sleep, steps, and exercise data.
+Output a daily log for a date, pulling sleep, steps, and exercise data in Genki Tracker format.
 
 ```bash
 garmin-data daily 2026-03-09
@@ -89,8 +97,6 @@ garmin-data push --start 2026-03-01                     # From date to today
 garmin-data push --start 2026-03-01 --end 2026-03-07    # Date range
 ```
 
-Only syncs the `summary`, `sleep`, and `activities` metrics needed for the daily data.
-
 ## Example Use Cases
 
 ### Push to Genki Tracker via cron
@@ -99,7 +105,7 @@ Add to your crontab to sync and push twice a day:
 
 ```bash
 # Push yesterday + today at 7am and 9pm
-0 7,21 * * * garmin-data push
+0 7,21 * * * GARMIN_EMAIL=you@example.com garmin-data push
 ```
 
 ### Daily sync via cron
@@ -126,14 +132,14 @@ Pull just the metrics you care about, then extract fields with `jq`:
 
 ```bash
 garmin-data sync --metrics sleep,rhr
-garmin-data query 2026-03-09 --metric rhr | tail -n +2 | jq '.restingHeartRate'
+garmin-data query 2026-03-09 --metric rhr | jq '.allMetrics.metricsMap.WELLNESS_RESTING_HEART_RATE[0].value'
 ```
 
 ### Export a week of step counts
 
 ```bash
 for d in 2026-03-{03..09}; do
-  steps=$(garmin-data query "$d" --metric steps 2>/dev/null | tail -n +2 | jq -r '.steps[0].steps // "N/A"')
+  steps=$(garmin-data query "$d" --metric summary 2>/dev/null | jq -r '.totalSteps // "N/A"')
   echo "$d: $steps"
 done
 ```
@@ -150,7 +156,20 @@ done
 ## Development
 
 ```bash
-uv sync
-uv run pytest
-uv tool install . --reinstall  # Re-install CLI after code changes
+# Run tests
+go test ./...
+
+# Build
+go build ./cmd/garmin-data
+
+# Install locally
+go install ./cmd/garmin-data
 ```
+
+## Architecture
+
+- **`cmd/garmin-data/`** — CLI commands (cobra)
+- **`internal/db/`** — SQLite persistence layer
+- **`internal/garmin/`** — Garmin Connect SSO auth + API client
+- **`internal/sync/`** — Sync orchestration with rate limiting + retries
+- **`internal/daily/`** — Daily health data extraction for Genki format
