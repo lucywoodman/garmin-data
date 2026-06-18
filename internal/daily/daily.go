@@ -108,7 +108,7 @@ func extractRHR(store *db.DB, dateStr string, result Data) error {
 		AllMetrics struct {
 			MetricsMap struct {
 				WellnessRHR []struct {
-					Value int `json:"value"`
+					Value float64 `json:"value"`
 				} `json:"WELLNESS_RESTING_HEART_RATE"`
 			} `json:"metricsMap"`
 		} `json:"allMetrics"`
@@ -117,7 +117,7 @@ func extractRHR(store *db.DB, dateStr string, result Data) error {
 		return fmt.Errorf("decode rhr data: %w", err)
 	}
 	if len(data.AllMetrics.MetricsMap.WellnessRHR) > 0 {
-		result["resting_heart_rate"] = data.AllMetrics.MetricsMap.WellnessRHR[0].Value
+		result["resting_heart_rate"] = int(data.AllMetrics.MetricsMap.WellnessRHR[0].Value)
 	}
 	return nil
 }
