@@ -1,8 +1,9 @@
 package main
 
 import (
-	"errors"
+	"fmt"
 
+	"github.com/lucywoodman/garmin-data/internal/daily"
 	"github.com/spf13/cobra"
 )
 
@@ -11,7 +12,38 @@ var dailyCmd = &cobra.Command{
 	Short: "Output daily log for a date",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return errors.New("daily: not implemented (coming in PR 4)")
+		dateStr := args[0]
+		if _, err := parseDateFlag(dateStr); err != nil {
+			return fmt.Errorf("invalid date %q: %w", dateStr, err)
+		}
+
+		store, err := openDB()
+		if err != nil {
+			return err
+		}
+		defer store.Close()
+
+		data, err := daily.Extract(store, dateStr)
+		if err != nil {
+			return err
+		}
+		if data == nil {
+			return nil
+		}
+
+		for key, value := range data {
+			if key == "date" {
+				continue
+			}
+			if key == "sleep_hours" {
+				if hours, ok := value.(float64); ok {
+					fmt.Printf("%s: %.2f\n", key, hours)
+					continue
+				}
+			}
+			fmt.Printf("%s: %v\n", key, value)
+		}
+		return nil
 	},
 }
 

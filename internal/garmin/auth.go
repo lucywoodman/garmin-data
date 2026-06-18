@@ -322,3 +322,67 @@ func truncate(s string, n int) string {
 	}
 	return s[:n] + "…"
 }
+
+// RefreshDIToken exchanges a refresh token for new DI access + refresh tokens.
+func RefreshDIToken(ctx context.Context, tokens *Tokens) (*Tokens, error) {
+	return refreshDITokenWith(ctx, tokens, defaultEndpoints())
+}
+
+func refreshDITokenWith(ctx context.Context, tokens *Tokens, eps endpoints) (*Tokens, error) {
+	if tokens.DIRefreshToken == "" {
+		return nil, errors.New("no refresh token available")
+	}
+	if tokens.DIClientID == "" {
+		return nil, errors.New("no DI client ID available")
+	}
+
+	form := url.Values{
+		"refresh_token": {tokens.DIRefreshToken},
+		"grant_type":    {"refresh_token"},
+	}
+
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		eps.diAuthBase+"/di-oauth2-service/oauth/token",
+		strings.NewReader(form.Encode()),
+	)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(tokens.DIClientID+":")))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := eps.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("DI refresh request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read DI refresh response: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, ErrRateLimited
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("DI refresh failed: HTTP %d %s", resp.StatusCode, truncate(string(raw), 200))
+	}
+
+	var body diTokenResponse
+	if err := json.Unmarshal(raw, &body); err != nil {
+		return nil, fmt.Errorf("decode DI refresh response: %w", err)
+	}
+	if body.AccessToken == "" {
+		return nil, errors.New("DI refresh returned empty access_token")
+	}
+
+	return &Tokens{
+		DIToken:        body.AccessToken,
+		DIRefreshToken: body.RefreshToken,
+		DIClientID:     tokens.DIClientID,
+	}, nil
+}
