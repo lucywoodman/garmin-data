@@ -338,6 +338,48 @@ func TestExtractActivitiesShortWalkDoesNotDisplaceTraining(t *testing.T) {
 	}
 }
 
+func TestExtractActivitiesHikingIsAWalk(t *testing.T) {
+	store := openTestDB(t)
+	defer store.Close()
+
+	upsertActivity(t, store, 1001, "2024-01-01", map[string]any{
+		"activityType": map[string]any{"typeKey": "hiking"},
+		"duration":     4863.75, // 81 minutes
+	})
+
+	data, err := Extract(store, "2024-01-01")
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	if data == nil {
+		t.Fatal("expected data, got nil")
+	}
+	if v, ok := data["exercise_type"].(string); !ok || v != "walk" {
+		t.Errorf("exercise_type: want walk, got %v", data["exercise_type"])
+	}
+}
+
+func TestExtractActivitiesLapSwimming(t *testing.T) {
+	store := openTestDB(t)
+	defer store.Close()
+
+	upsertActivity(t, store, 1001, "2024-01-01", map[string]any{
+		"activityType": map[string]any{"typeKey": "lap_swimming"},
+		"duration":     1800.5, // 30 minutes
+	})
+
+	data, err := Extract(store, "2024-01-01")
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	if data == nil {
+		t.Fatal("expected data, got nil")
+	}
+	if v, ok := data["exercise_type"].(string); !ok || v != "swim" {
+		t.Errorf("exercise_type: want swim, got %v", data["exercise_type"])
+	}
+}
+
 func TestExtractActivitiesVirtualRide(t *testing.T) {
 	store := openTestDB(t)
 	defer store.Close()

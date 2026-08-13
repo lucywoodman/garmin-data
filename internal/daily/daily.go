@@ -11,19 +11,22 @@ var activityTypeMap = map[string]string{
 	"running":             "run",
 	"swimming":            "swim",
 	"pool_swimming":       "swim",
+	"lap_swimming":        "swim",
 	"open_water_swimming": "swim",
 	"cycling":             "bike",
 	"road_biking":         "bike",
 	"mountain_biking":     "bike",
 	"virtual_ride":        "bike",
 	"strength_training":   "strength",
-	"hiking":              "hill_walk",
+	"hiking":              "walk",
 	"walking":             "walk",
 }
 
 // Walking gets logged constantly, so a walk only counts as the day's training
 // once it's long enough to be a deliberate one. Shorter walks still land in
-// the step count.
+// the step count. Hiking counts as walking: the duration filter already
+// separates a real outing from a stroll, which is all the distinction was
+// doing.
 const minWalkSeconds = 30 * 60
 
 type Data map[string]any
