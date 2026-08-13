@@ -243,6 +243,67 @@ func TestExtractActivitiesUnknownType(t *testing.T) {
 	}
 }
 
+// Garmin's aerobicTrainingEffect runs 0-5 in documented bands. Mapping it is
+// what makes intensity available at all — nothing has ever populated it.
+func TestExtractIntensityFromTrainingEffect(t *testing.T) {
+	cases := []struct {
+		effect float64
+		want   string
+	}{
+		{0.3, "easy"},      // strength_training, real value
+		{1.8, "easy"},      // the Eastbourne walk, real value
+		{2.0, "moderate"},  // band boundary
+		{2.5, "moderate"},  // the ROUVY ride, real value
+		{3.0, "hard"},      // band boundary
+		{3.4, "hard"},      // longest hilly walk, real value
+		{4.0, "very_hard"}, // band boundary
+		{5.0, "max_effort"},
+	}
+	for _, tc := range cases {
+		store := openTestDB(t)
+		upsertActivity(t, store, 1001, "2024-01-01", map[string]any{
+			"activityType":          map[string]any{"typeKey": "running"},
+			"duration":              2400.5,
+			"aerobicTrainingEffect": tc.effect,
+		})
+
+		_, activities, err := Extract(store, "2024-01-01")
+		store.Close()
+		if err != nil {
+			t.Fatalf("Extract(%v): %v", tc.effect, err)
+		}
+		if len(activities) != 1 {
+			t.Fatalf("effect %v: want 1 activity, got %d", tc.effect, len(activities))
+		}
+		if activities[0].Intensity != tc.want {
+			t.Errorf("effect %v: want %s, got %q", tc.effect, tc.want, activities[0].Intensity)
+		}
+	}
+}
+
+// Genki Tracker validates intensity against a closed vocabulary, so an absent
+// training effect has to mean "unset" rather than a guessed band.
+func TestExtractIntensityAbsentWhenTrainingEffectMissing(t *testing.T) {
+	store := openTestDB(t)
+	defer store.Close()
+
+	upsertActivity(t, store, 1001, "2024-01-01", map[string]any{
+		"activityType": map[string]any{"typeKey": "running"},
+		"duration":     2400.5,
+	})
+
+	_, activities, err := Extract(store, "2024-01-01")
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	if len(activities) != 1 {
+		t.Fatalf("want 1 activity, got %d", len(activities))
+	}
+	if activities[0].Intensity != "" {
+		t.Errorf("want empty intensity, got %q", activities[0].Intensity)
+	}
+}
+
 // The whole point of returning a list: a long walk must not hide the swim.
 func TestExtractReturnsEveryActivity(t *testing.T) {
 	store := openTestDB(t)

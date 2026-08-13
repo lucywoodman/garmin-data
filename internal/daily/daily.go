@@ -38,6 +38,37 @@ type Activity struct {
 	ActivityID int64  `json:"activity_id"`
 	Type       string `json:"exercise_type"`
 	Minutes    int    `json:"duration_minutes"`
+	Intensity  string `json:"intensity,omitempty"`
+}
+
+// intensityBands maps Garmin's aerobic training effect onto Genki Tracker's
+// intensity vocabulary. The lower bound of each band comes from Garmin's own
+// 0-5 scale: under 2 is recovery or maintenance, 3+ improves fitness, 5 is
+// overreaching. Ordered high to low so the first match wins.
+var intensityBands = []struct {
+	min   float64
+	label string
+}{
+	{5.0, "max_effort"},
+	{4.0, "very_hard"},
+	{3.0, "hard"},
+	{2.0, "moderate"},
+	{0.0, "easy"},
+}
+
+// intensityFor returns "" when Garmin reported no training effect, rather than
+// guessing a band — Genki Tracker validates against a closed vocabulary, and
+// an absent value is honest where a default would be invented data.
+func intensityFor(effect float64, present bool) string {
+	if !present {
+		return ""
+	}
+	for _, band := range intensityBands {
+		if effect >= band.min {
+			return band.label
+		}
+	}
+	return ""
 }
 
 // Extract extracts daily health data for a date into Genki Tracker format,
@@ -226,6 +257,9 @@ func extractActivities(store *db.DB, dateStr string) ([]Activity, error) {
 			// Garmin reports this as fractional seconds, so it must not be
 			// decoded into an int — that fails and drops the activity.
 			Duration float64 `json:"duration"`
+			// Pointer so a missing training effect is distinguishable from a
+			// reported 0.0, which is a real value meaning "no benefit".
+			AerobicTrainingEffect *float64 `json:"aerobicTrainingEffect"`
 		}
 		if err := json.Unmarshal(row.Data, &data); err != nil {
 			fmt.Printf("Warning: skipped activity %d (invalid JSON: %v)\n", row.ActivityID, err)
@@ -242,10 +276,15 @@ func extractActivities(store *db.DB, dateStr string) ([]Activity, error) {
 		if data.Duration <= 0 {
 			continue
 		}
+		effect := 0.0
+		if data.AerobicTrainingEffect != nil {
+			effect = *data.AerobicTrainingEffect
+		}
 		activities = append(activities, Activity{
 			ActivityID: row.ActivityID,
 			Type:       mapped,
 			Minutes:    int(data.Duration / 60),
+			Intensity:  intensityFor(effect, data.AerobicTrainingEffect != nil),
 		})
 	}
 

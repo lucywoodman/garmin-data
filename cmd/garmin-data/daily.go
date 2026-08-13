@@ -32,7 +32,11 @@ var dailyCmd = &cobra.Command{
 		}
 
 		for _, a := range activities {
-			fmt.Printf("activity: %s %dm\n", a.Type, a.Minutes)
+			intensity := a.Intensity
+			if intensity == "" {
+				intensity = "unknown"
+			}
+			fmt.Printf("activity: %s %dm %s\n", a.Type, a.Minutes, intensity)
 		}
 		for key, value := range data {
 			if key == "date" {
