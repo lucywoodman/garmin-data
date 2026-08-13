@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -119,7 +120,13 @@ func postToGenki(ctx context.Context, baseURL, password string, data daily.Data)
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("Genki Tracker returned HTTP %d", resp.StatusCode)
+		// Genki Tracker names the offending field in the body; without it a
+		// rejection reports only "400" and gives nothing to act on.
+		detail, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		if len(bytes.TrimSpace(detail)) == 0 {
+			return fmt.Errorf("Genki Tracker returned HTTP %d", resp.StatusCode)
+		}
+		return fmt.Errorf("Genki Tracker returned HTTP %d: %s", resp.StatusCode, bytes.TrimSpace(detail))
 	}
 	return nil
 }
