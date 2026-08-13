@@ -17,8 +17,9 @@ import (
 )
 
 var (
-	pushStart string
-	pushEnd   string
+	pushStart  string
+	pushEnd    string
+	pushNoSync bool
 )
 
 var pushCmd = &cobra.Command{
@@ -48,32 +49,40 @@ var pushCmd = &cobra.Command{
 			start = parsed
 		}
 
-		client, err := loadGarminClient()
-		if err != nil {
-			return err
-		}
 		store, err := openDB()
 		if err != nil {
 			return err
 		}
 		defer store.Close()
 
-		fmt.Printf("Syncing %s to %s...\n", start.Format(dateLayout), end.Format(dateLayout))
-		if err := sync.Metrics(cmd.Context(), client, store, start, end, sync.AllMetrics, sync.DefaultConfig()); err != nil {
-			return err
-		}
-		if err := sync.Activities(cmd.Context(), client, store, start, end, sync.DefaultConfig()); err != nil {
-			return err
-		}
-
-		// Save tokens if refreshed
-		if client.TokensUpdated() {
-			tokenDir, err := garminTokenDir()
+		if pushNoSync {
+			// Re-derive from what's already stored. Changing how a metric maps
+			// into Genki Tracker's shape doesn't change the raw Garmin data, so
+			// re-fetching a year of it costs ~2000 requests to no purpose.
+			fmt.Printf("Pushing %s to %s from the local database...\n", start.Format(dateLayout), end.Format(dateLayout))
+		} else {
+			client, err := loadGarminClient()
 			if err != nil {
-				return fmt.Errorf("locate token dir: %w", err)
+				return err
 			}
-			if err := client.Tokens().Save(tokenDir); err != nil {
-				return fmt.Errorf("save refreshed tokens: %w", err)
+
+			fmt.Printf("Syncing %s to %s...\n", start.Format(dateLayout), end.Format(dateLayout))
+			if err := sync.Metrics(cmd.Context(), client, store, start, end, sync.AllMetrics, sync.DefaultConfig()); err != nil {
+				return err
+			}
+			if err := sync.Activities(cmd.Context(), client, store, start, end, sync.DefaultConfig()); err != nil {
+				return err
+			}
+
+			// Save tokens if refreshed
+			if client.TokensUpdated() {
+				tokenDir, err := garminTokenDir()
+				if err != nil {
+					return fmt.Errorf("locate token dir: %w", err)
+				}
+				if err := client.Tokens().Save(tokenDir); err != nil {
+					return fmt.Errorf("save refreshed tokens: %w", err)
+				}
 			}
 		}
 
@@ -156,5 +165,6 @@ func postJSON(ctx context.Context, url, password string, payload any) error {
 func init() {
 	pushCmd.Flags().StringVar(&pushStart, "start", "", "Start date (YYYY-MM-DD, default: yesterday)")
 	pushCmd.Flags().StringVar(&pushEnd, "end", "", "End date (YYYY-MM-DD, default: today)")
+	pushCmd.Flags().BoolVar(&pushNoSync, "no-sync", false, "Push from the local database without fetching from Garmin")
 	rootCmd.AddCommand(pushCmd)
 }

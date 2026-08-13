@@ -102,7 +102,14 @@ Sync from Garmin and push daily summaries to [Genki Tracker](https://github.com/
 garmin-data push                                        # Yesterday + today
 garmin-data push --start 2026-03-01                     # From date to today
 garmin-data push --start 2026-03-01 --end 2026-03-07    # Date range
+garmin-data push --no-sync --start 2026-01-01           # Re-push what's stored
 ```
+
+`push` normally re-syncs the range from Garmin first, which for a full year is
+around 2000 requests and 17 minutes of rate-limit delays. `--no-sync` skips
+that and re-derives from the local database — use it when the raw data hasn't
+changed but the way it maps into Genki Tracker has (a new activity type, say).
+It needs no Garmin credentials.
 
 ## Example Use Cases
 
