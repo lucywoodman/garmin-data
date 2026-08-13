@@ -80,7 +80,7 @@ var pushCmd = &cobra.Command{
 		pushed := 0
 		for current := start; !current.After(end); current = current.AddDate(0, 0, 1) {
 			dateStr := current.Format(dateLayout)
-			data, err := daily.Extract(store, dateStr)
+			data, activities, err := daily.Extract(store, dateStr)
 			if err != nil {
 				return fmt.Errorf("extract %s: %w", dateStr, err)
 			}
@@ -89,6 +89,11 @@ var pushCmd = &cobra.Command{
 			}
 			if err := postToGenki(cmd.Context(), genkiURL, genkiPassword, data); err != nil {
 				return fmt.Errorf("push %s: %w", dateStr, err)
+			}
+			// Sent even when empty: that's how a day whose activities were
+			// deleted in Garmin gets cleared rather than keeping stale rows.
+			if err := postActivitiesToGenki(cmd.Context(), genkiURL, genkiPassword, dateStr, activities); err != nil {
+				return fmt.Errorf("push activities %s: %w", dateStr, err)
 			}
 			fmt.Printf("  Pushed %s\n", dateStr)
 			pushed++
@@ -100,12 +105,29 @@ var pushCmd = &cobra.Command{
 }
 
 func postToGenki(ctx context.Context, baseURL, password string, data daily.Data) error {
-	body, err := json.Marshal(data)
+	return postJSON(ctx, baseURL+"/api/garmin", password, data)
+}
+
+// postActivitiesToGenki replaces the date's activity set. An empty list is
+// meaningful — it clears a day whose activities were deleted in Garmin — so
+// it's sent as [] rather than null.
+func postActivitiesToGenki(ctx context.Context, baseURL, password, date string, activities []daily.Activity) error {
+	if activities == nil {
+		activities = []daily.Activity{}
+	}
+	return postJSON(ctx, baseURL+"/api/garmin-activities", password, map[string]any{
+		"date":       date,
+		"activities": activities,
+	})
+}
+
+func postJSON(ctx context.Context, url, password string, payload any) error {
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal data: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/garmin", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}

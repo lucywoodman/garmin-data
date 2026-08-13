@@ -81,11 +81,18 @@ Output a daily log for a date, pulling sleep, steps, and exercise data in Genki 
 
 ```bash
 garmin-data daily 2026-03-09
+# activity: walk 76m
+# activity: run 45m
 # sleep_hours: 7.25
 # steps: 8432
 # exercise_type: run
 # exercise_duration: 45
 ```
+
+Every activity is listed. `exercise_type` is the day's headline, and a walk
+only takes that slot when nothing else happened — walks are long and easy, so
+picking purely by duration would bury a shorter run or swim. Walks under 30
+minutes don't count as training at all.
 
 ### Push
 

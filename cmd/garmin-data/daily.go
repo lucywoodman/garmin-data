@@ -23,7 +23,7 @@ var dailyCmd = &cobra.Command{
 		}
 		defer store.Close()
 
-		data, err := daily.Extract(store, dateStr)
+		data, activities, err := daily.Extract(store, dateStr)
 		if err != nil {
 			return err
 		}
@@ -31,6 +31,9 @@ var dailyCmd = &cobra.Command{
 			return nil
 		}
 
+		for _, a := range activities {
+			fmt.Printf("activity: %s %dm\n", a.Type, a.Minutes)
+		}
 		for key, value := range data {
 			if key == "date" {
 				continue

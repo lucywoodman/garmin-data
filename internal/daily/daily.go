@@ -3,6 +3,7 @@ package daily
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/lucywoodman/garmin-data/internal/db"
 )
@@ -31,34 +32,66 @@ const minWalkSeconds = 30 * 60
 
 type Data map[string]any
 
-// Extract extracts daily health data for a date into Genki Tracker format.
-// Returns nil if no data is available for the given date.
-func Extract(store *db.DB, dateStr string) (Data, error) {
+// Activity is one Garmin activity in Genki Tracker's vocabulary. Plain data —
+// the day's list is what Genki Tracker stores, one row per activity.
+type Activity struct {
+	ActivityID int64  `json:"activity_id"`
+	Type       string `json:"exercise_type"`
+	Minutes    int    `json:"duration_minutes"`
+}
+
+// Extract extracts daily health data for a date into Genki Tracker format,
+// along with every activity that day, longest first. Data is nil if no data is
+// available for the given date. Both come back together because they're parsed
+// from the same rows — splitting them into two calls would parse twice and
+// warn twice about the same skipped activity.
+func Extract(store *db.DB, dateStr string) (Data, []Activity, error) {
 	result := Data{"date": dateStr}
 
 	if err := extractSleep(store, dateStr, result); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := extractSummary(store, dateStr, result); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := extractRHR(store, dateStr, result); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := extractHRV(store, dateStr, result); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := extractSpO2(store, dateStr, result); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if err := extractActivities(store, dateStr, result); err != nil {
-		return nil, err
+	activities, err := extractActivities(store, dateStr)
+	if err != nil {
+		return nil, nil, err
+	}
+	if best, ok := headline(activities); ok {
+		result["exercise_type"] = best.Type
+		result["exercise_duration"] = best.Minutes
 	}
 
 	if len(result) <= 1 {
-		return nil, nil
+		return nil, activities, nil
 	}
-	return result, nil
+	return result, activities, nil
+}
+
+// headline picks the single exercise Genki Tracker records against the day.
+// A walk only wins when nothing else happened: walks are the longest thing
+// logged and the least demanding, so picking purely by duration buried
+// shorter runs, swims and strength sessions.
+func headline(activities []Activity) (Activity, bool) {
+	if len(activities) == 0 {
+		return Activity{}, false
+	}
+	for _, a := range activities {
+		if a.Type != "walk" {
+			return a, true // already sorted longest first
+		}
+	}
+	return activities[0], true
 }
 
 func extractSleep(store *db.DB, dateStr string, result Data) error {
@@ -177,15 +210,14 @@ func extractSpO2(store *db.DB, dateStr string, result Data) error {
 	return nil
 }
 
-func extractActivities(store *db.DB, dateStr string, result Data) error {
+// extractActivities returns every mapped activity for a date, longest first.
+func extractActivities(store *db.DB, dateStr string) ([]Activity, error) {
 	rows, err := store.QueryActivities(dateStr)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	var bestType string
-	var bestDuration float64
-
+	activities := []Activity{}
 	for _, row := range rows {
 		var data struct {
 			ActivityType struct {
@@ -207,17 +239,20 @@ func extractActivities(store *db.DB, dateStr string, result Data) error {
 		if mapped == "walk" && data.Duration < minWalkSeconds {
 			continue
 		}
-		if data.Duration > bestDuration {
-			bestType = mapped
-			bestDuration = data.Duration
+		if data.Duration <= 0 {
+			continue
 		}
+		activities = append(activities, Activity{
+			ActivityID: row.ActivityID,
+			Type:       mapped,
+			Minutes:    int(data.Duration / 60),
+		})
 	}
 
-	if bestDuration > 0 {
-		result["exercise_type"] = bestType
-		result["exercise_duration"] = int(bestDuration / 60)
-	}
-	return nil
+	sort.Slice(activities, func(i, j int) bool {
+		return activities[i].Minutes > activities[j].Minutes
+	})
+	return activities, nil
 }
 
 func roundTo(val float64, decimals int) float64 {
