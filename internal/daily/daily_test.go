@@ -48,14 +48,14 @@ func TestExtractSummary(t *testing.T) {
 	defer store.Close()
 
 	summaryData := map[string]any{
-		"totalSteps":                10000,
-		"bodyBatteryAtWakeTime":     75,
-		"bodyBatteryHighestValue":   100,
-		"bodyBatteryLowestValue":    20,
-		"averageStressLevel":        35,
-		"maxStressLevel":            80,
-		"activeKilocalories":        500,
-		"floorsAscended":            12,
+		"totalSteps":              10000,
+		"bodyBatteryAtWakeTime":   75,
+		"bodyBatteryHighestValue": 100,
+		"bodyBatteryLowestValue":  20,
+		"averageStressLevel":      35,
+		"maxStressLevel":          80,
+		"activeKilocalories":      500,
+		"floorsAscended":          12,
 	}
 	upsert(t, store, "2024-01-01", "summary", summaryData)
 
@@ -68,14 +68,14 @@ func TestExtractSummary(t *testing.T) {
 	}
 
 	tests := map[string]float64{
-		"steps":                   10000,
-		"body_battery_at_wake":    75,
-		"body_battery_highest":    100,
-		"body_battery_lowest":     20,
-		"stress_avg":              35,
-		"stress_max":              80,
-		"active_calories":         500,
-		"floors_ascended":         12,
+		"steps":                10000,
+		"body_battery_at_wake": 75,
+		"body_battery_highest": 100,
+		"body_battery_lowest":  20,
+		"stress_avg":           35,
+		"stress_max":           80,
+		"active_calories":      500,
+		"floors_ascended":      12,
 	}
 	for key, want := range tests {
 		got, ok := data[key].(float64)
@@ -198,28 +198,18 @@ func TestExtractActivities(t *testing.T) {
 	upsertActivity(t, store, 1001, "2024-01-01", runData)
 	upsertActivity(t, store, 1002, "2024-01-01", swimData)
 
-	data, _, err := Extract(store, "2024-01-01")
+	_, activities, err := Extract(store, "2024-01-01")
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
-	if data == nil {
-		t.Fatal("expected data, got nil")
+	if len(activities) != 2 {
+		t.Fatalf("want 2 activities, got %d", len(activities))
 	}
-	if v, ok := data["exercise_type"].(string); !ok || v != "run" {
-		t.Errorf("exercise_type: want run, got %v", data["exercise_type"])
+	if activities[0].Type != "run" || activities[0].Minutes != 60 {
+		t.Errorf("activity 0: %+v", activities[0])
 	}
-	dur := data["exercise_duration"]
-	switch v := dur.(type) {
-	case int:
-		if v != 60 {
-			t.Errorf("exercise_duration: want 60, got %d", v)
-		}
-	case float64:
-		if v != 60 {
-			t.Errorf("exercise_duration: want 60, got %f", v)
-		}
-	default:
-		t.Errorf("exercise_duration: unexpected type %T", dur)
+	if activities[1].Type != "swim" || activities[1].Minutes != 30 {
+		t.Errorf("activity 1: %+v", activities[1])
 	}
 }
 
@@ -337,57 +327,7 @@ func TestExtractReturnsEveryActivity(t *testing.T) {
 	}
 }
 
-// A walk is the lowest-intensity thing logged and usually the longest, so
-// longest-wins buried real sessions. Anything else outranks it.
-func TestExtractHeadlinePrefersRealTrainingOverAWalk(t *testing.T) {
-	store := openTestDB(t)
-	defer store.Close()
-
-	upsertActivity(t, store, 1001, "2024-01-01", map[string]any{
-		"activityType": map[string]any{"typeKey": "walking"},
-		"duration":     5100.5, // 85 minutes
-	})
-	upsertActivity(t, store, 1002, "2024-01-01", map[string]any{
-		"activityType": map[string]any{"typeKey": "lap_swimming"},
-		"duration":     1920.25, // 32 minutes — shorter, but it's the training
-	})
-
-	data, _, err := Extract(store, "2024-01-01")
-	if err != nil {
-		t.Fatalf("Extract: %v", err)
-	}
-	if v, ok := data["exercise_type"].(string); !ok || v != "swim" {
-		t.Errorf("exercise_type: want swim, got %v", data["exercise_type"])
-	}
-	if v, ok := data["exercise_duration"].(int); !ok || v != 32 {
-		t.Errorf("exercise_duration: want 32, got %v", data["exercise_duration"])
-	}
-}
-
-// Two real sessions on one day: longest still wins between them.
-func TestExtractHeadlineLongestAmongRealSessions(t *testing.T) {
-	store := openTestDB(t)
-	defer store.Close()
-
-	upsertActivity(t, store, 1001, "2024-01-01", map[string]any{
-		"activityType": map[string]any{"typeKey": "running"},
-		"duration":     2340.5, // 39 minutes
-	})
-	upsertActivity(t, store, 1002, "2024-01-01", map[string]any{
-		"activityType": map[string]any{"typeKey": "virtual_ride"},
-		"duration":     3960.25, // 66 minutes
-	})
-
-	data, _, err := Extract(store, "2024-01-01")
-	if err != nil {
-		t.Fatalf("Extract: %v", err)
-	}
-	if v, ok := data["exercise_type"].(string); !ok || v != "bike" {
-		t.Errorf("exercise_type: want bike, got %v", data["exercise_type"])
-	}
-}
-
-// Short walks are excluded from the list too, not just the headline.
+// Short walks are excluded from the list entirely.
 func TestExtractOmitsShortWalksFromActivities(t *testing.T) {
 	store := openTestDB(t)
 	defer store.Close()
@@ -425,18 +365,15 @@ func TestExtractActivitiesFractionalDuration(t *testing.T) {
 		"duration":     3477.6220703125, // 57.96 minutes
 	})
 
-	data, _, err := Extract(store, "2024-01-01")
+	_, activities, err := Extract(store, "2024-01-01")
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
-	if data == nil {
-		t.Fatal("expected data, got nil")
+	if len(activities) != 1 {
+		t.Fatalf("want 1 activity, got %d", len(activities))
 	}
-	if v, ok := data["exercise_type"].(string); !ok || v != "run" {
-		t.Errorf("exercise_type: want run, got %v", data["exercise_type"])
-	}
-	if v, ok := data["exercise_duration"].(int); !ok || v != 57 {
-		t.Errorf("exercise_duration: want 57, got %v", data["exercise_duration"])
+	if activities[0].Type != "run" || activities[0].Minutes != 57 {
+		t.Errorf("activity 0: %+v", activities[0])
 	}
 }
 
@@ -449,18 +386,15 @@ func TestExtractActivitiesWalking(t *testing.T) {
 		"duration":     5484.4208984375, // 91.4 minutes
 	})
 
-	data, _, err := Extract(store, "2024-01-01")
+	_, activities, err := Extract(store, "2024-01-01")
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
-	if data == nil {
-		t.Fatal("expected data, got nil")
+	if len(activities) != 1 {
+		t.Fatalf("want 1 activity, got %d", len(activities))
 	}
-	if v, ok := data["exercise_type"].(string); !ok || v != "walk" {
-		t.Errorf("exercise_type: want walk, got %v", data["exercise_type"])
-	}
-	if v, ok := data["exercise_duration"].(int); !ok || v != 91 {
-		t.Errorf("exercise_duration: want 91, got %v", data["exercise_duration"])
+	if activities[0].Type != "walk" || activities[0].Minutes != 91 {
+		t.Errorf("activity 0: %+v", activities[0])
 	}
 }
 
@@ -482,7 +416,7 @@ func TestExtractActivitiesShortWalkIsNotTraining(t *testing.T) {
 	}
 }
 
-// A short walk must not suppress a real session logged the same day.
+// A short walk is dropped; the real session that day survives.
 func TestExtractActivitiesShortWalkDoesNotDisplaceTraining(t *testing.T) {
 	store := openTestDB(t)
 	defer store.Close()
@@ -496,15 +430,15 @@ func TestExtractActivitiesShortWalkDoesNotDisplaceTraining(t *testing.T) {
 		"duration":     900.25, // 15 minutes
 	})
 
-	data, _, err := Extract(store, "2024-01-01")
+	_, activities, err := Extract(store, "2024-01-01")
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
-	if data == nil {
-		t.Fatal("expected data, got nil")
+	if len(activities) != 1 {
+		t.Fatalf("want 1 activity, got %d", len(activities))
 	}
-	if v, ok := data["exercise_type"].(string); !ok || v != "strength" {
-		t.Errorf("exercise_type: want strength, got %v", data["exercise_type"])
+	if activities[0].Type != "strength" {
+		t.Errorf("activity 0: %+v", activities[0])
 	}
 }
 
@@ -517,15 +451,15 @@ func TestExtractActivitiesHikingIsAWalk(t *testing.T) {
 		"duration":     4863.75, // 81 minutes
 	})
 
-	data, _, err := Extract(store, "2024-01-01")
+	_, activities, err := Extract(store, "2024-01-01")
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
-	if data == nil {
-		t.Fatal("expected data, got nil")
+	if len(activities) != 1 {
+		t.Fatalf("want 1 activity, got %d", len(activities))
 	}
-	if v, ok := data["exercise_type"].(string); !ok || v != "walk" {
-		t.Errorf("exercise_type: want walk, got %v", data["exercise_type"])
+	if activities[0].Type != "walk" {
+		t.Errorf("activity 0: %+v", activities[0])
 	}
 }
 
@@ -538,15 +472,15 @@ func TestExtractActivitiesLapSwimming(t *testing.T) {
 		"duration":     1800.5, // 30 minutes
 	})
 
-	data, _, err := Extract(store, "2024-01-01")
+	_, activities, err := Extract(store, "2024-01-01")
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
-	if data == nil {
-		t.Fatal("expected data, got nil")
+	if len(activities) != 1 {
+		t.Fatalf("want 1 activity, got %d", len(activities))
 	}
-	if v, ok := data["exercise_type"].(string); !ok || v != "swim" {
-		t.Errorf("exercise_type: want swim, got %v", data["exercise_type"])
+	if activities[0].Type != "swim" {
+		t.Errorf("activity 0: %+v", activities[0])
 	}
 }
 
@@ -559,15 +493,15 @@ func TestExtractActivitiesVirtualRide(t *testing.T) {
 		"duration":     5867.59521484375, // 97.8 minutes
 	})
 
-	data, _, err := Extract(store, "2024-01-01")
+	_, activities, err := Extract(store, "2024-01-01")
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
-	if data == nil {
-		t.Fatal("expected data, got nil")
+	if len(activities) != 1 {
+		t.Fatalf("want 1 activity, got %d", len(activities))
 	}
-	if v, ok := data["exercise_type"].(string); !ok || v != "bike" {
-		t.Errorf("exercise_type: want bike, got %v", data["exercise_type"])
+	if activities[0].Type != "bike" {
+		t.Errorf("activity 0: %+v", activities[0])
 	}
 }
 

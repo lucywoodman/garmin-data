@@ -73,9 +73,8 @@ func intensityFor(effect float64, present bool) string {
 
 // Extract extracts daily health data for a date into Genki Tracker format,
 // along with every activity that day, longest first. Data is nil if no data is
-// available for the given date. Both come back together because they're parsed
-// from the same rows — splitting them into two calls would parse twice and
-// warn twice about the same skipped activity.
+// available for the given date — note that a day can have activities without
+// biometrics, so check both return values.
 func Extract(store *db.DB, dateStr string) (Data, []Activity, error) {
 	result := Data{"date": dateStr}
 
@@ -98,31 +97,11 @@ func Extract(store *db.DB, dateStr string) (Data, []Activity, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	if best, ok := headline(activities); ok {
-		result["exercise_type"] = best.Type
-		result["exercise_duration"] = best.Minutes
-	}
 
 	if len(result) <= 1 {
 		return nil, activities, nil
 	}
 	return result, activities, nil
-}
-
-// headline picks the single exercise Genki Tracker records against the day.
-// A walk only wins when nothing else happened: walks are the longest thing
-// logged and the least demanding, so picking purely by duration buried
-// shorter runs, swims and strength sessions.
-func headline(activities []Activity) (Activity, bool) {
-	if len(activities) == 0 {
-		return Activity{}, false
-	}
-	for _, a := range activities {
-		if a.Type != "walk" {
-			return a, true // already sorted longest first
-		}
-	}
-	return activities[0], true
 }
 
 func extractSleep(store *db.DB, dateStr string, result Data) error {
@@ -156,14 +135,14 @@ func extractSummary(store *db.DB, dateStr string, result Data) error {
 	}
 
 	fields := map[string]string{
-		"steps":                   "totalSteps",
-		"body_battery_at_wake":    "bodyBatteryAtWakeTime",
-		"body_battery_highest":    "bodyBatteryHighestValue",
-		"body_battery_lowest":     "bodyBatteryLowestValue",
-		"stress_avg":              "averageStressLevel",
-		"stress_max":              "maxStressLevel",
-		"active_calories":         "activeKilocalories",
-		"floors_ascended":         "floorsAscended",
+		"steps":                "totalSteps",
+		"body_battery_at_wake": "bodyBatteryAtWakeTime",
+		"body_battery_highest": "bodyBatteryHighestValue",
+		"body_battery_lowest":  "bodyBatteryLowestValue",
+		"stress_avg":           "averageStressLevel",
+		"stress_max":           "maxStressLevel",
+		"active_calories":      "activeKilocalories",
+		"floors_ascended":      "floorsAscended",
 	}
 	for target, source := range fields {
 		if value := data[source]; value != nil {

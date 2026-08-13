@@ -85,18 +85,15 @@ garmin-data daily 2026-03-09
 # activity: run 45m moderate
 # sleep_hours: 7.25
 # steps: 8432
-# exercise_type: run
-# exercise_duration: 45
 ```
 
 Every activity is listed with its intensity, derived from Garmin's aerobic
 training effect (under 2 easy, 2 moderate, 3 hard, 4 very_hard, 5 max_effort).
 It reads `unknown` when Garmin reported no training effect.
 
-`exercise_type` is the day's headline, and a walk only takes that slot when
-nothing else happened — walks are long and easy, so picking purely by duration
-would bury a shorter run or swim. Walks under 30 minutes don't count as
-training at all.
+Every session is kept. There's no single exercise per day: a day is often a dog
+walk *plus* a session, and reporting one of them meant the other disappeared.
+Walks under 30 minutes don't count as training at all.
 
 ### Push
 

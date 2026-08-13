@@ -93,11 +93,16 @@ var pushCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("extract %s: %w", dateStr, err)
 			}
-			if data == nil {
+			if data == nil && len(activities) == 0 {
 				continue
 			}
-			if err := postToGenki(cmd.Context(), genkiURL, genkiPassword, data); err != nil {
-				return fmt.Errorf("push %s: %w", dateStr, err)
+			// A day can have activities without biometrics — Garmin sometimes
+			// has the workout but no daily summary — so this is checked
+			// separately rather than skipping the whole day on a nil summary.
+			if data != nil {
+				if err := postToGenki(cmd.Context(), genkiURL, genkiPassword, data); err != nil {
+					return fmt.Errorf("push %s: %w", dateStr, err)
+				}
 			}
 			// Sent even when empty: that's how a day whose activities were
 			// deleted in Garmin gets cleared rather than keeping stale rows.
