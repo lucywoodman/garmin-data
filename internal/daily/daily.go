@@ -8,16 +8,23 @@ import (
 )
 
 var activityTypeMap = map[string]string{
-	"running":              "run",
-	"swimming":             "swim",
-	"pool_swimming":        "swim",
-	"open_water_swimming":  "swim",
-	"cycling":              "bike",
-	"road_biking":          "bike",
-	"mountain_biking":      "bike",
-	"strength_training":    "strength",
-	"hiking":               "hill_walk",
+	"running":             "run",
+	"swimming":            "swim",
+	"pool_swimming":       "swim",
+	"open_water_swimming": "swim",
+	"cycling":             "bike",
+	"road_biking":         "bike",
+	"mountain_biking":     "bike",
+	"virtual_ride":        "bike",
+	"strength_training":   "strength",
+	"hiking":              "hill_walk",
+	"walking":             "walk",
 }
+
+// Walking gets logged constantly, so a walk only counts as the day's training
+// once it's long enough to be a deliberate one. Shorter walks still land in
+// the step count.
+const minWalkSeconds = 30 * 60
 
 type Data map[string]any
 
@@ -174,20 +181,27 @@ func extractActivities(store *db.DB, dateStr string, result Data) error {
 	}
 
 	var bestType string
-	var bestDuration int
+	var bestDuration float64
 
 	for _, row := range rows {
 		var data struct {
 			ActivityType struct {
 				TypeKey string `json:"typeKey"`
 			} `json:"activityType"`
-			Duration int `json:"duration"`
+			// Garmin reports this as fractional seconds, so it must not be
+			// decoded into an int — that fails and drops the activity.
+			Duration float64 `json:"duration"`
 		}
 		if err := json.Unmarshal(row.Data, &data); err != nil {
+			fmt.Printf("Warning: skipped activity %d (invalid JSON: %v)\n", row.ActivityID, err)
 			continue
 		}
 		mapped, ok := activityTypeMap[data.ActivityType.TypeKey]
 		if !ok {
+			fmt.Printf("Warning: skipped activity %d (unmapped type %q)\n", row.ActivityID, data.ActivityType.TypeKey)
+			continue
+		}
+		if mapped == "walk" && data.Duration < minWalkSeconds {
 			continue
 		}
 		if data.Duration > bestDuration {
@@ -198,7 +212,7 @@ func extractActivities(store *db.DB, dateStr string, result Data) error {
 
 	if bestDuration > 0 {
 		result["exercise_type"] = bestType
-		result["exercise_duration"] = bestDuration / 60
+		result["exercise_duration"] = int(bestDuration / 60)
 	}
 	return nil
 }

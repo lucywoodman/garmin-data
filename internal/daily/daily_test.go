@@ -243,6 +243,122 @@ func TestExtractActivitiesUnknownType(t *testing.T) {
 	}
 }
 
+// Garmin reports duration as a fractional number of seconds. Fixtures using
+// whole numbers hid this for a long time: every real activity failed to
+// decode and was dropped, so no exercise ever reached Genki Tracker.
+func TestExtractActivitiesFractionalDuration(t *testing.T) {
+	store := openTestDB(t)
+	defer store.Close()
+
+	upsertActivity(t, store, 1001, "2024-01-01", map[string]any{
+		"activityType": map[string]any{"typeKey": "running"},
+		"duration":     3477.6220703125, // 57.96 minutes
+	})
+
+	data, err := Extract(store, "2024-01-01")
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	if data == nil {
+		t.Fatal("expected data, got nil")
+	}
+	if v, ok := data["exercise_type"].(string); !ok || v != "run" {
+		t.Errorf("exercise_type: want run, got %v", data["exercise_type"])
+	}
+	if v, ok := data["exercise_duration"].(int); !ok || v != 57 {
+		t.Errorf("exercise_duration: want 57, got %v", data["exercise_duration"])
+	}
+}
+
+func TestExtractActivitiesWalking(t *testing.T) {
+	store := openTestDB(t)
+	defer store.Close()
+
+	upsertActivity(t, store, 1001, "2024-01-01", map[string]any{
+		"activityType": map[string]any{"typeKey": "walking"},
+		"duration":     5484.4208984375, // 91.4 minutes
+	})
+
+	data, err := Extract(store, "2024-01-01")
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	if data == nil {
+		t.Fatal("expected data, got nil")
+	}
+	if v, ok := data["exercise_type"].(string); !ok || v != "walk" {
+		t.Errorf("exercise_type: want walk, got %v", data["exercise_type"])
+	}
+	if v, ok := data["exercise_duration"].(int); !ok || v != 91 {
+		t.Errorf("exercise_duration: want 91, got %v", data["exercise_duration"])
+	}
+}
+
+func TestExtractActivitiesShortWalkIsNotTraining(t *testing.T) {
+	store := openTestDB(t)
+	defer store.Close()
+
+	upsertActivity(t, store, 1001, "2024-01-01", map[string]any{
+		"activityType": map[string]any{"typeKey": "walking"},
+		"duration":     1020.5, // 17 minutes — a stroll, not a session
+	})
+
+	data, err := Extract(store, "2024-01-01")
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	if data != nil {
+		t.Errorf("expected nil for a short walk, got %+v", data)
+	}
+}
+
+// A short walk must not suppress a real session logged the same day.
+func TestExtractActivitiesShortWalkDoesNotDisplaceTraining(t *testing.T) {
+	store := openTestDB(t)
+	defer store.Close()
+
+	upsertActivity(t, store, 1001, "2024-01-01", map[string]any{
+		"activityType": map[string]any{"typeKey": "walking"},
+		"duration":     1020.5, // 17 minutes
+	})
+	upsertActivity(t, store, 1002, "2024-01-01", map[string]any{
+		"activityType": map[string]any{"typeKey": "strength_training"},
+		"duration":     900.25, // 15 minutes
+	})
+
+	data, err := Extract(store, "2024-01-01")
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	if data == nil {
+		t.Fatal("expected data, got nil")
+	}
+	if v, ok := data["exercise_type"].(string); !ok || v != "strength" {
+		t.Errorf("exercise_type: want strength, got %v", data["exercise_type"])
+	}
+}
+
+func TestExtractActivitiesVirtualRide(t *testing.T) {
+	store := openTestDB(t)
+	defer store.Close()
+
+	upsertActivity(t, store, 1001, "2024-01-01", map[string]any{
+		"activityType": map[string]any{"typeKey": "virtual_ride"},
+		"duration":     5867.59521484375, // 97.8 minutes
+	})
+
+	data, err := Extract(store, "2024-01-01")
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	if data == nil {
+		t.Fatal("expected data, got nil")
+	}
+	if v, ok := data["exercise_type"].(string); !ok || v != "bike" {
+		t.Errorf("exercise_type: want bike, got %v", data["exercise_type"])
+	}
+}
+
 func openTestDB(t *testing.T) *db.DB {
 	t.Helper()
 	tmpDir := t.TempDir()
