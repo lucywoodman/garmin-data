@@ -104,7 +104,14 @@ garmin-data push                                        # Yesterday + today
 garmin-data push --start 2026-03-01                     # From date to today
 garmin-data push --start 2026-03-01 --end 2026-03-07    # Date range
 garmin-data push --no-sync --start 2026-01-01           # Re-push what's stored
+garmin-data push --metrics summary                      # Cheap, frequent run
 ```
+
+`--metrics` narrows what's fetched before pushing; activities are always synced.
+`--metrics summary` is one request per day rather than nine and carries steps —
+the only biometric that moves during the day. Sleep, HRV, resting heart rate and
+body battery at wake are settled by morning, so a frequent run has no reason to
+re-fetch them.
 
 `push` normally re-syncs the range from Garmin first, which for a full year is
 around 2000 requests and 17 minutes of rate-limit delays. `--no-sync` skips

@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/lucywoodman/garmin-data/internal/db"
 	"github.com/lucywoodman/garmin-data/internal/garmin"
+	"github.com/lucywoodman/garmin-data/internal/sync"
 )
 
 const dateLayout = "2006-01-02"
@@ -46,6 +48,19 @@ func loadGarminClient() (*garmin.Client, error) {
 
 func parseDateFlag(value string) (time.Time, error) {
 	return time.ParseInLocation(dateLayout, value, time.Local)
+}
+
+// parseMetrics resolves a comma-separated --metrics value. Empty means all of
+// them. Shared by sync and push so a narrowed sync means the same thing to
+// both — push uses it for the frequent, cheap run that keeps steps current.
+func parseMetrics(raw string) ([]sync.Metric, error) {
+	var names []string
+	for _, n := range strings.Split(raw, ",") {
+		if n = strings.TrimSpace(n); n != "" {
+			names = append(names, n)
+		}
+	}
+	return sync.MetricsByName(names)
 }
 
 func printJSON(data []byte) {

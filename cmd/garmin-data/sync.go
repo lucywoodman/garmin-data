@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/lucywoodman/garmin-data/internal/sync"
@@ -42,15 +41,7 @@ var syncCmd = &cobra.Command{
 				start.Format(dateLayout), end.Format(dateLayout))
 		}
 
-		var names []string
-		if syncMetrics != "" {
-			for _, n := range strings.Split(syncMetrics, ",") {
-				if n = strings.TrimSpace(n); n != "" {
-					names = append(names, n)
-				}
-			}
-		}
-		metrics, err := sync.MetricsByName(names)
+		metrics, err := parseMetrics(syncMetrics)
 		if err != nil {
 			return err
 		}

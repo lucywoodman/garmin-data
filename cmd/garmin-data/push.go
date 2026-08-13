@@ -17,9 +17,10 @@ import (
 )
 
 var (
-	pushStart  string
-	pushEnd    string
-	pushNoSync bool
+	pushStart   string
+	pushEnd     string
+	pushNoSync  bool
+	pushMetrics string
 )
 
 var pushCmd = &cobra.Command{
@@ -66,8 +67,13 @@ var pushCmd = &cobra.Command{
 				return err
 			}
 
+			metrics, err := parseMetrics(pushMetrics)
+			if err != nil {
+				return err
+			}
+
 			fmt.Printf("Syncing %s to %s...\n", start.Format(dateLayout), end.Format(dateLayout))
-			if err := sync.Metrics(cmd.Context(), client, store, start, end, sync.AllMetrics, sync.DefaultConfig()); err != nil {
+			if err := sync.Metrics(cmd.Context(), client, store, start, end, metrics, sync.DefaultConfig()); err != nil {
 				return err
 			}
 			if err := sync.Activities(cmd.Context(), client, store, start, end, sync.DefaultConfig()); err != nil {
@@ -171,5 +177,10 @@ func init() {
 	pushCmd.Flags().StringVar(&pushStart, "start", "", "Start date (YYYY-MM-DD, default: yesterday)")
 	pushCmd.Flags().StringVar(&pushEnd, "end", "", "End date (YYYY-MM-DD, default: today)")
 	pushCmd.Flags().BoolVar(&pushNoSync, "no-sync", false, "Push from the local database without fetching from Garmin")
+	pushCmd.Flags().StringVar(&pushMetrics, "metrics", "",
+		"Comma-separated metrics to sync before pushing (default: all). "+
+			"Activities are always synced. Narrow this for a frequent, cheap "+
+			"run: `--metrics summary` carries steps, the only biometric that "+
+			"moves during the day.")
 	rootCmd.AddCommand(pushCmd)
 }
