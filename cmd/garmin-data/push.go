@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,7 +27,7 @@ var (
 var pushCmd = &cobra.Command{
 	Use:   "push",
 	Short: "Sync from Garmin and push daily data to Genki Tracker",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (err error) {
 		genkiURL := strings.TrimSuffix(os.Getenv("GENKI_URL"), "/")
 		genkiPassword := os.Getenv("GENKI_PASSWORD")
 		if genkiURL == "" || genkiPassword == "" {
@@ -54,7 +55,7 @@ var pushCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer store.Close()
+		defer func() { err = errors.Join(err, store.Close()) }()
 
 		if pushNoSync {
 			// Re-derive from what's already stored. Changing how a metric maps
@@ -152,16 +153,16 @@ func postJSON(ctx context.Context, url, password string, payload any) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// Genki Tracker names the offending field in the body; without it a
 		// rejection reports only "400" and gives nothing to act on.
 		detail, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		if len(bytes.TrimSpace(detail)) == 0 {
-			return fmt.Errorf("Genki Tracker returned HTTP %d", resp.StatusCode)
+			return fmt.Errorf("HTTP %d from Genki Tracker", resp.StatusCode)
 		}
-		return fmt.Errorf("Genki Tracker returned HTTP %d: %s", resp.StatusCode, bytes.TrimSpace(detail))
+		return fmt.Errorf("HTTP %d from Genki Tracker: %s", resp.StatusCode, bytes.TrimSpace(detail))
 	}
 	return nil
 }

@@ -84,7 +84,7 @@ func (c *Client) get(ctx context.Context, path string, params url.Values) (json.
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	switch {
 	case resp.StatusCode == http.StatusTooManyRequests:

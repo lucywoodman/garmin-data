@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -55,8 +56,7 @@ func Open(path string) (*DB, error) {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
 	if _, err := conn.Exec(schema); err != nil {
-		conn.Close()
-		return nil, fmt.Errorf("create schema: %w", err)
+		return nil, errors.Join(fmt.Errorf("create schema: %w", err), conn.Close())
 	}
 	return &DB{conn: conn}, nil
 }
@@ -102,7 +102,7 @@ func (d *DB) QueryDate(date string) ([]HealthRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanHealthRecords(rows)
 }
 
@@ -160,7 +160,7 @@ func (d *DB) QueryActivities(date string) ([]Activity, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanActivities(rows)
 }
 

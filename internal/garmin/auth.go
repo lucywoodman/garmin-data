@@ -205,7 +205,7 @@ func decodeMobileResponse(client *http.Client, req *http.Request) (*mobileLoginR
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusTooManyRequests {
 		return nil, ErrRateLimited
@@ -261,7 +261,7 @@ func exchangeServiceTicket(ctx context.Context, ticket string, eps endpoints) (*
 		}
 
 		raw, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err != nil {
 			lastErr = fmt.Errorf("read DI response: %w", err)
 			continue
@@ -358,7 +358,7 @@ func refreshDITokenWith(ctx context.Context, tokens *Tokens, eps endpoints) (*To
 	if err != nil {
 		return nil, fmt.Errorf("DI refresh request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {

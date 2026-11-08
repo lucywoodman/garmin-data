@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -19,7 +20,7 @@ var (
 var syncCmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Sync health data from Garmin",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (err error) {
 		end := time.Now()
 		if syncEnd != "" {
 			parsed, err := parseDateFlag(syncEnd)
@@ -54,7 +55,7 @@ var syncCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer store.Close()
+		defer func() { err = errors.Join(err, store.Close()) }()
 
 		fmt.Printf("Syncing %s to %s...\n", start.Format(dateLayout), end.Format(dateLayout))
 		syncErr := sync.Metrics(cmd.Context(), client, store, start, end, metrics, sync.DefaultConfig())

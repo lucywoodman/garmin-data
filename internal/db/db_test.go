@@ -13,7 +13,11 @@ func newDB(t *testing.T) *DB {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() {
+		if err := d.Close(); err != nil {
+			t.Errorf("close DB: %v", err)
+		}
+	})
 	return d
 }
 
