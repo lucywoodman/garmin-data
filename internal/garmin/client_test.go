@@ -80,6 +80,23 @@ func TestGet401ReturnsErrInvalidCredentials(t *testing.T) {
 	}
 }
 
+// A 401 whose refresh also fails is still an auth failure. The sync loop stops
+// on ErrInvalidCredentials, and losing it here meant a dead token skipped every
+// metric of every day and exited 0.
+func TestGet401WithFailedRefreshStillReturnsErrInvalidCredentials(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	// No DI client ID makes the refresh fail before it reaches the network.
+	client := NewClient(&Tokens{DIToken: "t", DIRefreshToken: "r"}).WithAPIBase(srv.URL)
+	_, err := client.Get(context.Background(), "/x", nil)
+	if !errors.Is(err, ErrInvalidCredentials) {
+		t.Errorf("want ErrInvalidCredentials, got %v", err)
+	}
+}
+
 func TestDisplayNameCachesAfterFirstFetch(t *testing.T) {
 	var calls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
