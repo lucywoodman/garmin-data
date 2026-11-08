@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -12,7 +13,7 @@ var queryCmd = &cobra.Command{
 	Use:   "query [date]",
 	Short: "Query stored data for a date",
 	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (err error) {
 		dateStr := args[0]
 		if _, err := parseDateFlag(dateStr); err != nil {
 			return fmt.Errorf("invalid date %q: %w", dateStr, err)
@@ -22,7 +23,7 @@ var queryCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer store.Close()
+		defer func() { err = errors.Join(err, store.Close()) }()
 
 		if queryMetric != "" {
 			row, err := store.Query(dateStr, queryMetric)

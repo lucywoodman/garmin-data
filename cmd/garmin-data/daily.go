@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/lucywoodman/garmin-data/internal/daily"
@@ -11,7 +12,7 @@ var dailyCmd = &cobra.Command{
 	Use:   "daily [date]",
 	Short: "Output daily log for a date",
 	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (err error) {
 		dateStr := args[0]
 		if _, err := parseDateFlag(dateStr); err != nil {
 			return fmt.Errorf("invalid date %q: %w", dateStr, err)
@@ -21,7 +22,7 @@ var dailyCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer store.Close()
+		defer func() { err = errors.Join(err, store.Close()) }()
 
 		data, activities, err := daily.Extract(store, dateStr)
 		if err != nil {

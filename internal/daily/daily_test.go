@@ -9,7 +9,6 @@ import (
 
 func TestExtractEmptyDB(t *testing.T) {
 	store := openTestDB(t)
-	defer store.Close()
 
 	data, _, err := Extract(store, "2024-01-01")
 	if err != nil {
@@ -22,7 +21,6 @@ func TestExtractEmptyDB(t *testing.T) {
 
 func TestExtractSleep(t *testing.T) {
 	store := openTestDB(t)
-	defer store.Close()
 
 	sleepData := map[string]any{
 		"dailySleepDTO": map[string]any{
@@ -45,7 +43,6 @@ func TestExtractSleep(t *testing.T) {
 
 func TestExtractSummary(t *testing.T) {
 	store := openTestDB(t)
-	defer store.Close()
 
 	summaryData := map[string]any{
 		"totalSteps":              10000,
@@ -91,7 +88,6 @@ func TestExtractSummary(t *testing.T) {
 
 func TestExtractRHR(t *testing.T) {
 	store := openTestDB(t)
-	defer store.Close()
 
 	rhrData := map[string]any{
 		"allMetrics": map[string]any{
@@ -128,7 +124,6 @@ func TestExtractRHR(t *testing.T) {
 
 func TestExtractHRV(t *testing.T) {
 	store := openTestDB(t)
-	defer store.Close()
 
 	hrvData := map[string]any{
 		"hrvSummary": map[string]any{
@@ -159,7 +154,6 @@ func TestExtractHRV(t *testing.T) {
 
 func TestExtractSpO2(t *testing.T) {
 	store := openTestDB(t)
-	defer store.Close()
 
 	spo2Data := map[string]any{
 		"averageSpO2": 96,
@@ -184,7 +178,6 @@ func TestExtractSpO2(t *testing.T) {
 
 func TestExtractActivities(t *testing.T) {
 	store := openTestDB(t)
-	defer store.Close()
 
 	// Insert two activities, running is longer
 	runData := map[string]any{
@@ -215,7 +208,6 @@ func TestExtractActivities(t *testing.T) {
 
 func TestExtractActivitiesUnknownType(t *testing.T) {
 	store := openTestDB(t)
-	defer store.Close()
 
 	unknownData := map[string]any{
 		"activityType": map[string]any{"typeKey": "unknown_type"},
@@ -258,7 +250,6 @@ func TestExtractIntensityFromTrainingEffect(t *testing.T) {
 		})
 
 		_, activities, err := Extract(store, "2024-01-01")
-		store.Close()
 		if err != nil {
 			t.Fatalf("Extract(%v): %v", tc.effect, err)
 		}
@@ -275,7 +266,6 @@ func TestExtractIntensityFromTrainingEffect(t *testing.T) {
 // training effect has to mean "unset" rather than a guessed band.
 func TestExtractIntensityAbsentWhenTrainingEffectMissing(t *testing.T) {
 	store := openTestDB(t)
-	defer store.Close()
 
 	upsertActivity(t, store, 1001, "2024-01-01", map[string]any{
 		"activityType": map[string]any{"typeKey": "running"},
@@ -297,7 +287,6 @@ func TestExtractIntensityAbsentWhenTrainingEffectMissing(t *testing.T) {
 // The whole point of returning a list: a long walk must not hide the swim.
 func TestExtractReturnsEveryActivity(t *testing.T) {
 	store := openTestDB(t)
-	defer store.Close()
 
 	upsertActivity(t, store, 1001, "2024-01-01", map[string]any{
 		"activityType": map[string]any{"typeKey": "walking"},
@@ -330,7 +319,6 @@ func TestExtractReturnsEveryActivity(t *testing.T) {
 // Short walks are excluded from the list entirely.
 func TestExtractOmitsShortWalksFromActivities(t *testing.T) {
 	store := openTestDB(t)
-	defer store.Close()
 
 	upsertActivity(t, store, 1001, "2024-01-01", map[string]any{
 		"activityType": map[string]any{"typeKey": "walking"},
@@ -358,7 +346,6 @@ func TestExtractOmitsShortWalksFromActivities(t *testing.T) {
 // decode and was dropped, so no exercise ever reached Genki Tracker.
 func TestExtractActivitiesFractionalDuration(t *testing.T) {
 	store := openTestDB(t)
-	defer store.Close()
 
 	upsertActivity(t, store, 1001, "2024-01-01", map[string]any{
 		"activityType": map[string]any{"typeKey": "running"},
@@ -379,7 +366,6 @@ func TestExtractActivitiesFractionalDuration(t *testing.T) {
 
 func TestExtractActivitiesWalking(t *testing.T) {
 	store := openTestDB(t)
-	defer store.Close()
 
 	upsertActivity(t, store, 1001, "2024-01-01", map[string]any{
 		"activityType": map[string]any{"typeKey": "walking"},
@@ -400,7 +386,6 @@ func TestExtractActivitiesWalking(t *testing.T) {
 
 func TestExtractActivitiesShortWalkIsNotTraining(t *testing.T) {
 	store := openTestDB(t)
-	defer store.Close()
 
 	upsertActivity(t, store, 1001, "2024-01-01", map[string]any{
 		"activityType": map[string]any{"typeKey": "walking"},
@@ -419,7 +404,6 @@ func TestExtractActivitiesShortWalkIsNotTraining(t *testing.T) {
 // A short walk is dropped; the real session that day survives.
 func TestExtractActivitiesShortWalkDoesNotDisplaceTraining(t *testing.T) {
 	store := openTestDB(t)
-	defer store.Close()
 
 	upsertActivity(t, store, 1001, "2024-01-01", map[string]any{
 		"activityType": map[string]any{"typeKey": "walking"},
@@ -444,7 +428,6 @@ func TestExtractActivitiesShortWalkDoesNotDisplaceTraining(t *testing.T) {
 
 func TestExtractActivitiesHikingIsAWalk(t *testing.T) {
 	store := openTestDB(t)
-	defer store.Close()
 
 	upsertActivity(t, store, 1001, "2024-01-01", map[string]any{
 		"activityType": map[string]any{"typeKey": "hiking"},
@@ -465,7 +448,6 @@ func TestExtractActivitiesHikingIsAWalk(t *testing.T) {
 
 func TestExtractActivitiesLapSwimming(t *testing.T) {
 	store := openTestDB(t)
-	defer store.Close()
 
 	upsertActivity(t, store, 1001, "2024-01-01", map[string]any{
 		"activityType": map[string]any{"typeKey": "lap_swimming"},
@@ -486,7 +468,6 @@ func TestExtractActivitiesLapSwimming(t *testing.T) {
 
 func TestExtractActivitiesVirtualRide(t *testing.T) {
 	store := openTestDB(t)
-	defer store.Close()
 
 	upsertActivity(t, store, 1001, "2024-01-01", map[string]any{
 		"activityType": map[string]any{"typeKey": "virtual_ride"},
@@ -513,6 +494,11 @@ func openTestDB(t *testing.T) *db.DB {
 	if err != nil {
 		t.Fatalf("open DB: %v", err)
 	}
+	t.Cleanup(func() {
+		if err := store.Close(); err != nil {
+			t.Errorf("close DB: %v", err)
+		}
+	})
 	return store
 }
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -9,12 +10,12 @@ import (
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show sync status and record counts",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (err error) {
 		store, err := openDB()
 		if err != nil {
 			return err
 		}
-		defer store.Close()
+		defer func() { err = errors.Join(err, store.Close()) }()
 
 		recs, err := store.RecordCount()
 		if err != nil {
