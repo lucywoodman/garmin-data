@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -113,6 +114,13 @@ func Metrics(ctx context.Context, c *garmin.Client, store *db.DB, start, end tim
 			if err != nil {
 				cfg.Logger("Warning: skipped %s for %s (%v)", m.Name, dateStr, err)
 				failed++
+				continue
+			}
+			// Garmin answers with an empty body when a metric isn't ready
+			// yet - today's HRV before the night has uploaded. Nothing to
+			// store, and not a failure either: Garmin did answer.
+			if len(bytes.TrimSpace(data)) == 0 {
+				cfg.Logger("Note: no data yet for %s on %s", m.Name, dateStr)
 				continue
 			}
 			if err := store.Upsert(dateStr, m.Name, json.RawMessage(data)); err != nil {

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -353,5 +354,38 @@ func TestScheduledWorkoutsLeavesStoreAloneOnFailure(t *testing.T) {
 	}
 	if got, _ := store.QueryScheduledWorkouts("2026-11-10"); len(got) != 1 || got[0].WorkoutID != 1 {
 		t.Errorf("want the stored day untouched, got %+v", got)
+	}
+}
+
+// Garmin answers today's HRV with an empty body until the night has uploaded.
+// Storing that failed to marshal and aborted the run, so every 06:00 full sync
+// from at least 2026-10-08 pushed nothing - including yesterday's settled
+// numbers. An empty answer is "no data yet": skip it and carry on.
+func TestMetricsSkipsAnEmptyAnswer(t *testing.T) {
+	store := newTestDB(t)
+	var logged []string
+	cfg := fastConfig()
+	cfg.Logger = func(format string, args ...any) { logged = append(logged, fmt.Sprintf(format, args...)) }
+	metrics := []Metric{
+		{Name: "hrv", Fetch: func(_ context.Context, _ *garmin.Client, _ string) (json.RawMessage, error) {
+			return json.RawMessage(""), nil
+		}},
+		{Name: "body_battery", Fetch: func(_ context.Context, _ *garmin.Client, _ string) (json.RawMessage, error) {
+			return json.RawMessage(`{"charged":40}`), nil
+		}},
+	}
+	day := time.Date(2026, 11, 8, 0, 0, 0, 0, time.UTC)
+
+	if err := Metrics(context.Background(), nil, store, day, day, metrics, cfg); err != nil {
+		t.Fatalf("Metrics: %v", err)
+	}
+	if row, _ := store.Query("2026-11-08", "hrv"); row != nil {
+		t.Errorf("hrv: want nothing stored, got %s", row.Data)
+	}
+	if row, _ := store.Query("2026-11-08", "body_battery"); row == nil {
+		t.Error("body_battery: want it stored - the run must carry on past the empty metric")
+	}
+	if !strings.Contains(strings.Join(logged, "\n"), "no data yet for hrv on 2026-11-08") {
+		t.Errorf("want the skip logged, got %q", logged)
 	}
 }
