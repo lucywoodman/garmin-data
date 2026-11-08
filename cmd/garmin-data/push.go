@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/lucywoodman/garmin-data/internal/daily"
+	"github.com/lucywoodman/garmin-data/internal/db"
 	"github.com/lucywoodman/garmin-data/internal/sync"
 	"github.com/spf13/cobra"
 )
@@ -24,6 +25,9 @@ var (
 	pushMetrics string
 )
 
+// defaultPushDays is yesterday and today.
+const defaultPushDays = 2
+
 var pushCmd = &cobra.Command{
 	Use:   "push",
 	Short: "Sync from Garmin and push daily data to Genki Tracker",
@@ -34,21 +38,9 @@ var pushCmd = &cobra.Command{
 			return fmt.Errorf("GENKI_URL and GENKI_PASSWORD environment variables are required")
 		}
 
-		end := time.Now()
-		if pushEnd != "" {
-			parsed, err := parseDateFlag(pushEnd)
-			if err != nil {
-				return fmt.Errorf("--end: %w", err)
-			}
-			end = parsed
-		}
-		start := end.AddDate(0, 0, -1) // default: yesterday
-		if pushStart != "" {
-			parsed, err := parseDateFlag(pushStart)
-			if err != nil {
-				return fmt.Errorf("--start: %w", err)
-			}
-			start = parsed
+		start, end, err := dateRange(pushStart, pushEnd, time.Now(), defaultPushDays)
+		if err != nil {
+			return err
 		}
 
 		store, err := openDB()
@@ -86,36 +78,45 @@ var pushCmd = &cobra.Command{
 			}
 		}
 
-		pushed := 0
-		for current := start; !current.After(end); current = current.AddDate(0, 0, 1) {
-			dateStr := current.Format(dateLayout)
-			data, activities, err := daily.Extract(store, dateStr)
-			if err != nil {
-				return fmt.Errorf("extract %s: %w", dateStr, err)
-			}
-			if data == nil && len(activities) == 0 {
-				continue
-			}
-			// A day can have activities without biometrics — Garmin sometimes
-			// has the workout but no daily summary — so this is checked
-			// separately rather than skipping the whole day on a nil summary.
-			if data != nil {
-				if err := postToGenki(cmd.Context(), genkiURL, genkiPassword, data); err != nil {
-					return fmt.Errorf("push %s: %w", dateStr, err)
-				}
-			}
-			// Sent even when empty: that's how a day whose activities were
-			// deleted in Garmin gets cleared rather than keeping stale rows.
-			if err := postActivitiesToGenki(cmd.Context(), genkiURL, genkiPassword, dateStr, activities); err != nil {
-				return fmt.Errorf("push activities %s: %w", dateStr, err)
-			}
-			fmt.Printf("  Pushed %s\n", dateStr)
-			pushed++
+		pushed, err := pushDays(cmd.Context(), store, genkiURL, genkiPassword, start, end, os.Stdout)
+		if err != nil {
+			return err
 		}
-
 		fmt.Printf("Done. Pushed %d day(s) to Genki Tracker.\n", pushed)
 		return nil
 	},
+}
+
+// pushDays sends each stored day in [start, end] to Genki Tracker, stopping at
+// the first rejection, and returns how many days it pushed.
+func pushDays(ctx context.Context, store *db.DB, genkiURL, genkiPassword string, start, end time.Time, out io.Writer) (int, error) {
+	pushed := 0
+	for current := start; !current.After(end); current = current.AddDate(0, 0, 1) {
+		dateStr := current.Format(dateLayout)
+		data, activities, err := daily.Extract(store, dateStr)
+		if err != nil {
+			return pushed, fmt.Errorf("extract %s: %w", dateStr, err)
+		}
+		if data == nil && len(activities) == 0 {
+			continue
+		}
+		// A day can have activities without biometrics — Garmin sometimes
+		// has the workout but no daily summary — so this is checked
+		// separately rather than skipping the whole day on a nil summary.
+		if data != nil {
+			if err := postToGenki(ctx, genkiURL, genkiPassword, data); err != nil {
+				return pushed, fmt.Errorf("push %s: %w", dateStr, err)
+			}
+		}
+		// Sent even when empty: that's how a day whose activities were
+		// deleted in Garmin gets cleared rather than keeping stale rows.
+		if err := postActivitiesToGenki(ctx, genkiURL, genkiPassword, dateStr, activities); err != nil {
+			return pushed, fmt.Errorf("push activities %s: %w", dateStr, err)
+		}
+		_, _ = fmt.Fprintf(out, "  Pushed %s\n", dateStr)
+		pushed++
+	}
+	return pushed, nil
 }
 
 func postToGenki(ctx context.Context, baseURL, password string, data daily.Data) error {

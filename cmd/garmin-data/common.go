@@ -67,6 +67,28 @@ func parseDateFlag(value string) (time.Time, error) {
 	return time.ParseInLocation(dateLayout, value, time.Local)
 }
 
+// dateRange resolves --start and --end. An empty --end means now; an empty
+// --start means the window of days ending on --end, inclusive.
+func dateRange(startFlag, endFlag string, now time.Time, days int) (start, end time.Time, err error) {
+	end = now
+	if endFlag != "" {
+		if end, err = parseDateFlag(endFlag); err != nil {
+			return start, end, fmt.Errorf("--end: %w", err)
+		}
+	}
+	start = end.AddDate(0, 0, -(days - 1))
+	if startFlag != "" {
+		if start, err = parseDateFlag(startFlag); err != nil {
+			return start, end, fmt.Errorf("--start: %w", err)
+		}
+	}
+	if start.After(end) {
+		return start, end, fmt.Errorf("--start (%s) is after --end (%s)",
+			start.Format(dateLayout), end.Format(dateLayout))
+	}
+	return start, end, nil
+}
+
 // parseMetrics resolves a comma-separated --metrics value. Empty means all of
 // them. Shared by sync and push so a narrowed sync means the same thing to
 // both — push uses it for the frequent, cheap run that keeps steps current.

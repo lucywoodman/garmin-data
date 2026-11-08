@@ -21,25 +21,9 @@ var syncCmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Sync health data from Garmin",
 	RunE: func(cmd *cobra.Command, args []string) (err error) {
-		end := time.Now()
-		if syncEnd != "" {
-			parsed, err := parseDateFlag(syncEnd)
-			if err != nil {
-				return fmt.Errorf("--end: %w", err)
-			}
-			end = parsed
-		}
-		start := end.AddDate(0, 0, -(defaultSyncDays - 1))
-		if syncStart != "" {
-			parsed, err := parseDateFlag(syncStart)
-			if err != nil {
-				return fmt.Errorf("--start: %w", err)
-			}
-			start = parsed
-		}
-		if start.After(end) {
-			return fmt.Errorf("--start (%s) is after --end (%s)",
-				start.Format(dateLayout), end.Format(dateLayout))
+		start, end, err := dateRange(syncStart, syncEnd, time.Now(), defaultSyncDays)
+		if err != nil {
+			return err
 		}
 
 		metrics, err := parseMetrics(syncMetrics)
