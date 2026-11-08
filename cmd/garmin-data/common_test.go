@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestParseMetrics(t *testing.T) {
 	all, err := parseMetrics("")
@@ -31,5 +34,44 @@ func TestParseMetrics(t *testing.T) {
 
 	if _, err := parseMetrics("nonsense"); err == nil {
 		t.Error("unknown metric should be rejected, not silently skipped")
+	}
+}
+
+func TestDateRange(t *testing.T) {
+	now := time.Date(2026, 3, 10, 15, 0, 0, 0, time.Local)
+
+	start, end, err := dateRange("", "", now, 2)
+	if err != nil {
+		t.Fatalf("defaults: %v", err)
+	}
+	if got := start.Format(dateLayout); got != "2026-03-09" {
+		t.Errorf("default start: want 2026-03-09, got %s", got)
+	}
+	if !end.Equal(now) {
+		t.Errorf("default end: want now, got %v", end)
+	}
+
+	start, end, err = dateRange("2026-01-01", "2026-01-31", now, 2)
+	if err != nil {
+		t.Fatalf("explicit: %v", err)
+	}
+	if start.Format(dateLayout) != "2026-01-01" || end.Format(dateLayout) != "2026-01-31" {
+		t.Errorf("explicit: got %s to %s", start.Format(dateLayout), end.Format(dateLayout))
+	}
+
+	// The default window counts back from --end, not from today.
+	start, _, err = dateRange("", "2026-01-31", now, 7)
+	if err != nil {
+		t.Fatalf("end only: %v", err)
+	}
+	if got := start.Format(dateLayout); got != "2026-01-25" {
+		t.Errorf("end only: want start 2026-01-25, got %s", got)
+	}
+
+	if _, _, err := dateRange("2026-02-01", "2026-01-31", now, 2); err == nil {
+		t.Error("start after end should be rejected, not treated as an empty range")
+	}
+	if _, _, err := dateRange("31/01/2026", "", now, 2); err == nil {
+		t.Error("malformed --start should be rejected")
 	}
 }
