@@ -23,9 +23,10 @@ sudo mv garmin-data /usr/local/bin/  # Optional: install globally
 
 ### Development
 
-Enable the pre-commit hook, which rejects commits with unformatted Go files:
+Enable the pre-commit hook, which rejects commits with unformatted Go files or golangci-lint issues:
 
 ```bash
+mise install  # installs the pinned Go and golangci-lint
 git config core.hooksPath .githooks
 ```
 
