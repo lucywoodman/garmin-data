@@ -273,3 +273,85 @@ func TestActivitiesParsesAndPersists(t *testing.T) {
 		t.Errorf("activity 1003 should be skipped (invalid date), got %+v", got)
 	}
 }
+
+// A range that crosses a month boundary needs both months of calendar. Only
+// workout items inside the range are fetched in detail and stored, and every
+// day in the range is replaced - including the ones with nothing on.
+func TestScheduledWorkoutsFetchesRangeAcrossMonths(t *testing.T) {
+	store := newTestDB(t)
+	var months, details []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/calendar-service/year/2026/month/10":
+			months = append(months, "nov")
+			_, _ = w.Write([]byte(`{"calendarItems": [
+				{"itemType": "workout", "date": "2026-11-29", "workoutId": 11},
+				{"itemType": "activity", "date": "2026-11-30", "activityId": 99},
+				{"itemType": "workout", "date": "2026-11-20", "workoutId": 10}
+			]}`))
+		case "/calendar-service/year/2026/month/11":
+			months = append(months, "dec")
+			_, _ = w.Write([]byte(`{"calendarItems": [
+				{"itemType": "workout", "date": "2026-12-02", "workoutId": 12}
+			]}`))
+		case "/workout-service/workout/11", "/workout-service/workout/12":
+			details = append(details, r.URL.Path)
+			_, _ = w.Write([]byte(`{"workoutName": "` + r.URL.Path + `"}`))
+		default:
+			t.Errorf("unexpected request %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+	client := garmin.NewClient(&garmin.Tokens{DIToken: "t", DIClientID: "c"}).WithAPIBase(srv.URL)
+
+	// Seed a stale session for a day that's now empty; the run must clear it.
+	if err := store.ReplaceScheduledWorkouts("2026-12-01", map[int64]any{7: map[string]any{}}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	start := time.Date(2026, 11, 28, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 12, 2, 0, 0, 0, 0, time.UTC)
+	if err := ScheduledWorkouts(context.Background(), client, store, start, end, fastConfig()); err != nil {
+		t.Fatalf("ScheduledWorkouts: %v", err)
+	}
+
+	if fmt.Sprint(months) != "[nov dec]" {
+		t.Errorf("calendar months: want [nov dec], got %v", months)
+	}
+	if len(details) != 2 {
+		t.Errorf("want details for 11 and 12 only (10 is outside the range), got %v", details)
+	}
+	if got, _ := store.QueryScheduledWorkouts("2026-11-29"); len(got) != 1 || got[0].WorkoutID != 11 {
+		t.Errorf("2026-11-29: got %+v", got)
+	}
+	if got, _ := store.QueryScheduledWorkouts("2026-12-01"); len(got) != 0 {
+		t.Errorf("2026-12-01: want cleared, got %+v", got)
+	}
+}
+
+// A failed fetch must not touch what's stored, so the caller can decline to
+// push and genki's freshness marker goes stale honestly.
+func TestScheduledWorkoutsLeavesStoreAloneOnFailure(t *testing.T) {
+	store := newTestDB(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/calendar-service/year/2026/month/10" {
+			_, _ = w.Write([]byte(`{"calendarItems": [{"itemType": "workout", "date": "2026-11-10", "workoutId": 5}]}`))
+			return
+		}
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer srv.Close()
+	client := garmin.NewClient(&garmin.Tokens{DIToken: "t", DIClientID: "c"}).WithAPIBase(srv.URL)
+
+	if err := store.ReplaceScheduledWorkouts("2026-11-10", map[int64]any{1: map[string]any{}}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	day := time.Date(2026, 11, 10, 0, 0, 0, 0, time.UTC)
+	if err := ScheduledWorkouts(context.Background(), client, store, day, day, fastConfig()); err == nil {
+		t.Fatal("want an error when a workout detail fails, got nil")
+	}
+	if got, _ := store.QueryScheduledWorkouts("2026-11-10"); len(got) != 1 || got[0].WorkoutID != 1 {
+		t.Errorf("want the stored day untouched, got %+v", got)
+	}
+}

@@ -181,3 +181,41 @@ func TestPushDaysStopsOnRejection(t *testing.T) {
 		t.Errorf("should stop at the first rejection, got %d requests", len(*got))
 	}
 }
+
+// Every day in the range is sent, empty ones as [] - that's how a session an
+// app deleted gets cleared in Genki Tracker rather than lingering as a plan.
+func TestPushScheduledDaysSendsEveryDay(t *testing.T) {
+	store := openTestDB(t)
+	if err := store.ReplaceScheduledWorkouts("2026-11-10", map[int64]any{
+		5: map[string]any{
+			"workoutName":               "Technique session + Catch - 1250m",
+			"workoutProvider":           "Catch",
+			"sportType":                 map[string]any{"sportTypeKey": "swimming"},
+			"estimatedDistanceInMeters": 1250.0,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	srv, got := genkiServer(t, http.StatusOK)
+	err := pushScheduledDays(context.Background(), store, srv.URL, "secret",
+		mustDate(t, "2026-11-10"), mustDate(t, "2026-11-11"), &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("pushScheduledDays: %v", err)
+	}
+
+	if len(*got) != 2 {
+		t.Fatalf("want one request per day, got %+v", *got)
+	}
+	first, second := (*got)[0], (*got)[1]
+	if first.path != "/api/scheduled-workouts" || first.body["date"] != "2026-11-10" {
+		t.Errorf("first request: got %s %v", first.path, first.body["date"])
+	}
+	workouts, _ := first.body["workouts"].([]any)
+	if len(workouts) != 1 || workouts[0].(map[string]any)["provider"] != "Catch" {
+		t.Errorf("first workouts: got %#v", first.body["workouts"])
+	}
+	if empty, ok := second.body["workouts"].([]any); !ok || len(empty) != 0 {
+		t.Errorf("second workouts: want [], got %#v", second.body["workouts"])
+	}
+}

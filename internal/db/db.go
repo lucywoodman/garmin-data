@@ -26,6 +26,15 @@ CREATE TABLE IF NOT EXISTS activities (
     synced_at REAL NOT NULL
 );
 
+-- Workouts an app has scheduled ahead, keyed by the day they're planned for.
+CREATE TABLE IF NOT EXISTS scheduled_workouts (
+    date TEXT NOT NULL,
+    workout_id INTEGER NOT NULL,
+    data TEXT NOT NULL,
+    synced_at REAL NOT NULL,
+    PRIMARY KEY (date, workout_id)
+);
+
 CREATE TABLE IF NOT EXISTS sync_log (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -41,6 +50,13 @@ type HealthRecord struct {
 	Metric   string
 	Data     json.RawMessage
 	SyncedAt float64
+}
+
+type ScheduledWorkout struct {
+	Date      string
+	WorkoutID int64
+	Data      json.RawMessage
+	SyncedAt  float64
 }
 
 type Activity struct {
@@ -208,4 +224,57 @@ func scanActivities(rows *sql.Rows) ([]Activity, error) {
 
 func nowEpoch() float64 {
 	return float64(time.Now().UnixNano()) / 1e9
+}
+
+// ReplaceScheduledWorkouts sets the day's scheduled workouts to exactly these,
+// keyed by workout ID. The calendar is the authority for the days it covers,
+// so a session the app moved or deleted goes, and nil clears the day.
+func (d *DB) ReplaceScheduledWorkouts(date string, workouts map[int64]any) error {
+	tx, err := d.conn.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.Exec(`DELETE FROM scheduled_workouts WHERE date = ?`, date); err != nil {
+		return err
+	}
+	for id, data := range workouts {
+		encoded, err := json.Marshal(data)
+		if err != nil {
+			return fmt.Errorf("marshal scheduled workout %d: %w", id, err)
+		}
+		if _, err := tx.Exec(
+			`INSERT INTO scheduled_workouts (date, workout_id, data, synced_at) VALUES (?, ?, ?, ?)`,
+			date, id, string(encoded), nowEpoch(),
+		); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (d *DB) QueryScheduledWorkouts(date string) ([]ScheduledWorkout, error) {
+	rows, err := d.conn.Query(
+		`SELECT date, workout_id, data, synced_at FROM scheduled_workouts WHERE date = ? ORDER BY workout_id`,
+		date,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []ScheduledWorkout
+	for rows.Next() {
+		var (
+			w   ScheduledWorkout
+			raw string
+		)
+		if err := rows.Scan(&w.Date, &w.WorkoutID, &raw, &w.SyncedAt); err != nil {
+			return nil, err
+		}
+		w.Data = json.RawMessage(raw)
+		out = append(out, w)
+	}
+	return out, rows.Err()
 }

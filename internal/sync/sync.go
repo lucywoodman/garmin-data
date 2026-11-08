@@ -159,6 +159,73 @@ func Activities(ctx context.Context, c *garmin.Client, store *db.DB, start, end 
 	return store.SetSyncLog("last_activity_sync_date", endStr)
 }
 
+// ScheduledWorkouts fetches the workouts apps have scheduled from start to end
+// and replaces each of those days in the store - days with nothing planned
+// included, so a session that was moved or deleted goes too.
+//
+// Unlike Metrics, any fetch failure returns an error before the store is
+// touched: a partial fetch would replace days with half their plan, and the
+// caller uses the error to decide not to push, so genki's freshness marker
+// goes stale. (Each day is then written in its own transaction, so a storage
+// error partway through can still leave earlier days replaced.)
+func ScheduledWorkouts(ctx context.Context, c *garmin.Client, store *db.DB, start, end time.Time, cfg Config) error {
+	cfg.Logger("Syncing scheduled workouts...")
+	startStr, endStr := start.Format("2006-01-02"), end.Format("2006-01-02")
+
+	type item struct {
+		date string
+		id   int64
+	}
+	var items []item
+	for month := time.Date(start.Year(), start.Month(), 1, 0, 0, 0, 0, time.UTC); !month.After(end); month = month.AddDate(0, 1, 0) {
+		raw, err := c.CalendarMonth(ctx, month.Year(), int(month.Month())-1)
+		if err != nil {
+			return fmt.Errorf("calendar %s: %w", month.Format("2006-01"), err)
+		}
+		var cal struct {
+			CalendarItems []struct {
+				ItemType  string `json:"itemType"`
+				Date      string `json:"date"`
+				WorkoutID int64  `json:"workoutId"`
+			} `json:"calendarItems"`
+		}
+		if err := json.Unmarshal(raw, &cal); err != nil {
+			return fmt.Errorf("decode calendar %s: %w", month.Format("2006-01"), err)
+		}
+		for _, ci := range cal.CalendarItems {
+			if ci.ItemType == "workout" && ci.Date >= startStr && ci.Date <= endStr {
+				items = append(items, item{ci.Date, ci.WorkoutID})
+			}
+		}
+		if err := sleepCtx(ctx, cfg.RateLimitDelay); err != nil {
+			return err
+		}
+	}
+
+	byDate := map[string]map[int64]any{}
+	for _, it := range items {
+		detail, err := c.Workout(ctx, it.id)
+		if err != nil {
+			return fmt.Errorf("workout %d for %s: %w", it.id, it.date, err)
+		}
+		if byDate[it.date] == nil {
+			byDate[it.date] = map[int64]any{}
+		}
+		byDate[it.date][it.id] = detail
+		if err := sleepCtx(ctx, cfg.RateLimitDelay); err != nil {
+			return err
+		}
+	}
+
+	for day := start; !day.After(end); day = day.AddDate(0, 0, 1) {
+		date := day.Format("2006-01-02")
+		if err := store.ReplaceScheduledWorkouts(date, byDate[date]); err != nil {
+			return fmt.Errorf("store scheduled workouts %s: %w", date, err)
+		}
+	}
+	return nil
+}
+
 func fetchWithRetry(ctx context.Context, fetch Fetcher, c *garmin.Client, date string, cfg Config) (json.RawMessage, error) {
 	var lastErr error
 	for attempt := 0; attempt < cfg.MaxRetries; attempt++ {
