@@ -225,3 +225,35 @@ func TestCounts(t *testing.T) {
 		t.Errorf("ActivityCount: want 3, got %d", ac)
 	}
 }
+
+// The calendar is the authority for each day it covers: a session Runna moved
+// or deleted must disappear here too, not linger as a plan Lucy no longer has.
+func TestReplaceScheduledWorkoutsClearsTheDay(t *testing.T) {
+	d := newDB(t)
+	first := map[int64]any{1: map[string]any{"workoutName": "a"}, 2: map[string]any{"workoutName": "b"}}
+	if err := d.ReplaceScheduledWorkouts("2026-11-10", first); err != nil {
+		t.Fatalf("ReplaceScheduledWorkouts: %v", err)
+	}
+	if err := d.ReplaceScheduledWorkouts("2026-11-10", map[int64]any{3: map[string]any{"workoutName": "c"}}); err != nil {
+		t.Fatalf("ReplaceScheduledWorkouts: %v", err)
+	}
+
+	got, err := d.QueryScheduledWorkouts("2026-11-10")
+	if err != nil {
+		t.Fatalf("QueryScheduledWorkouts: %v", err)
+	}
+	if len(got) != 1 || got[0].WorkoutID != 3 {
+		t.Fatalf("want only workout 3, got %+v", got)
+	}
+	var data map[string]any
+	if err := json.Unmarshal(got[0].Data, &data); err != nil || data["workoutName"] != "c" {
+		t.Errorf("data: got %s (%v)", got[0].Data, err)
+	}
+
+	if err := d.ReplaceScheduledWorkouts("2026-11-10", nil); err != nil {
+		t.Fatalf("ReplaceScheduledWorkouts empty: %v", err)
+	}
+	if got, _ := d.QueryScheduledWorkouts("2026-11-10"); len(got) != 0 {
+		t.Errorf("want the day cleared, got %+v", got)
+	}
+}

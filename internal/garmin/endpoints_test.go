@@ -66,6 +66,19 @@ func TestEndpointPathsAndParams(t *testing.T) {
 			nil,
 		},
 		{
+			// Month is 0-based in this endpoint: 10 is November.
+			"CalendarMonth",
+			func(c *Client) error { _, err := c.CalendarMonth(context.Background(), 2026, 10); return err },
+			"/calendar-service/year/2026/month/10",
+			nil,
+		},
+		{
+			"Workout",
+			func(c *Client) error { _, err := c.Workout(context.Background(), 1749179419); return err },
+			"/workout-service/workout/1749179419",
+			nil,
+		},
+		{
 			"BodyBatteryEvents",
 			func(c *Client) error { _, err := c.BodyBatteryEvents(context.Background(), "2026-06-15"); return err },
 			"/wellness-service/wellness/bodyBattery/events/2026-06-15",

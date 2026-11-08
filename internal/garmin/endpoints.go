@@ -3,6 +3,7 @@ package garmin
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"strconv"
 )
@@ -83,6 +84,18 @@ func (c *Client) SpO2Data(ctx context.Context, date string) (json.RawMessage, er
 
 func (c *Client) BodyBatteryEvents(ctx context.Context, date string) (json.RawMessage, error) {
 	return c.Get(ctx, "/wellness-service/wellness/bodyBattery/events/"+date, nil)
+}
+
+// CalendarMonth returns a month of the Garmin calendar: activities, naps and
+// the workouts apps like Runna and Catch schedule ahead. month0 is 0-based,
+// as the endpoint expects - November is 10.
+func (c *Client) CalendarMonth(ctx context.Context, year, month0 int) (json.RawMessage, error) {
+	return c.Get(ctx, fmt.Sprintf("/calendar-service/year/%d/month/%d", year, month0), nil)
+}
+
+// Workout returns one workout's full definition, steps and all.
+func (c *Client) Workout(ctx context.Context, id int64) (json.RawMessage, error) {
+	return c.Get(ctx, "/workout-service/workout/"+strconv.FormatInt(id, 10), nil)
 }
 
 func (c *Client) ActivitiesByDate(ctx context.Context, start, end string) ([]json.RawMessage, error) {
