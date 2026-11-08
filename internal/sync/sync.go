@@ -19,15 +19,33 @@ type Metric struct {
 }
 
 var AllMetrics = []Metric{
-	{"summary", func(ctx context.Context, c *garmin.Client, d string) (json.RawMessage, error) { return c.UserSummary(ctx, d) }},
-	{"heart_rate", func(ctx context.Context, c *garmin.Client, d string) (json.RawMessage, error) { return c.HeartRates(ctx, d) }},
-	{"rhr", func(ctx context.Context, c *garmin.Client, d string) (json.RawMessage, error) { return c.RestingHeartRate(ctx, d) }},
-	{"sleep", func(ctx context.Context, c *garmin.Client, d string) (json.RawMessage, error) { return c.SleepData(ctx, d) }},
-	{"steps", func(ctx context.Context, c *garmin.Client, d string) (json.RawMessage, error) { return c.StepsData(ctx, d) }},
-	{"stress", func(ctx context.Context, c *garmin.Client, d string) (json.RawMessage, error) { return c.StressData(ctx, d) }},
-	{"hrv", func(ctx context.Context, c *garmin.Client, d string) (json.RawMessage, error) { return c.HRVData(ctx, d) }},
-	{"spo2", func(ctx context.Context, c *garmin.Client, d string) (json.RawMessage, error) { return c.SpO2Data(ctx, d) }},
-	{"body_battery", func(ctx context.Context, c *garmin.Client, d string) (json.RawMessage, error) { return c.BodyBatteryEvents(ctx, d) }},
+	{"summary", func(ctx context.Context, c *garmin.Client, d string) (json.RawMessage, error) {
+		return c.UserSummary(ctx, d)
+	}},
+	{"heart_rate", func(ctx context.Context, c *garmin.Client, d string) (json.RawMessage, error) {
+		return c.HeartRates(ctx, d)
+	}},
+	{"rhr", func(ctx context.Context, c *garmin.Client, d string) (json.RawMessage, error) {
+		return c.RestingHeartRate(ctx, d)
+	}},
+	{"sleep", func(ctx context.Context, c *garmin.Client, d string) (json.RawMessage, error) {
+		return c.SleepData(ctx, d)
+	}},
+	{"steps", func(ctx context.Context, c *garmin.Client, d string) (json.RawMessage, error) {
+		return c.StepsData(ctx, d)
+	}},
+	{"stress", func(ctx context.Context, c *garmin.Client, d string) (json.RawMessage, error) {
+		return c.StressData(ctx, d)
+	}},
+	{"hrv", func(ctx context.Context, c *garmin.Client, d string) (json.RawMessage, error) {
+		return c.HRVData(ctx, d)
+	}},
+	{"spo2", func(ctx context.Context, c *garmin.Client, d string) (json.RawMessage, error) {
+		return c.SpO2Data(ctx, d)
+	}},
+	{"body_battery", func(ctx context.Context, c *garmin.Client, d string) (json.RawMessage, error) {
+		return c.BodyBatteryEvents(ctx, d)
+	}},
 }
 
 type Config struct {

@@ -108,8 +108,8 @@ type mobileLoginResponse struct {
 	ResponseStatus struct {
 		Type string `json:"type"`
 	} `json:"responseStatus"`
-	ServiceTicketID  string `json:"serviceTicketId"`
-	CustomerMFAInfo  struct {
+	ServiceTicketID string `json:"serviceTicketId"`
+	CustomerMFAInfo struct {
 		MFALastMethodUsed string `json:"mfaLastMethodUsed"`
 	} `json:"customerMfaInfo"`
 	Error struct {
