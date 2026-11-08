@@ -126,8 +126,9 @@ func TestMetricsSkipsAfterExhaustedRetries(t *testing.T) {
 	}}
 	day := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
 
-	if err := Metrics(context.Background(), nil, store, day, day, metrics, fastConfig()); err != nil {
-		t.Fatalf("Metrics: %v", err)
+	// The only metric never got through, so the run as a whole fails too.
+	if err := Metrics(context.Background(), nil, store, day, day, metrics, fastConfig()); err == nil {
+		t.Error("want an error when the only fetch was skipped, got nil")
 	}
 	row, _ := store.Query("2026-06-15", "blocked")
 	if row != nil {
@@ -150,6 +151,71 @@ func TestMetricsHaltsOnNonRetryableError(t *testing.T) {
 	_ = Metrics(context.Background(), nil, store, day, day, metrics, fastConfig())
 	if attempts != 1 {
 		t.Errorf("non-retryable error should attempt once, got %d", attempts)
+	}
+}
+
+// A dead token fails every request the same way, and refreshing it again for
+// each one only hammers Garmin's auth endpoint. Stop at the first.
+func TestMetricsStopsOnAuthFailure(t *testing.T) {
+	store := newTestDB(t)
+	var attempts int
+	metrics := []Metric{{
+		Name: "locked",
+		Fetch: func(_ context.Context, _ *garmin.Client, _ string) (json.RawMessage, error) {
+			attempts++
+			return nil, fmt.Errorf("token refresh failed: %w", garmin.ErrInvalidCredentials)
+		},
+	}}
+	start := time.Date(2026, 6, 14, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 6, 16, 0, 0, 0, 0, time.UTC)
+
+	err := Metrics(context.Background(), nil, store, start, end, metrics, fastConfig())
+	if !errors.Is(err, garmin.ErrInvalidCredentials) {
+		t.Errorf("want ErrInvalidCredentials, got %v", err)
+	}
+	if attempts != 1 {
+		t.Errorf("attempts: want 1, got %d", attempts)
+	}
+}
+
+// A run that fetched nothing is a failed run, whatever the reason. It used to
+// log a warning per request and exit 0, so a sync that had stopped working
+// looked exactly like one that had.
+func TestMetricsFailsWhenNothingWasFetched(t *testing.T) {
+	store := newTestDB(t)
+	metrics := []Metric{{
+		Name: "down",
+		Fetch: func(_ context.Context, _ *garmin.Client, _ string) (json.RawMessage, error) {
+			return nil, errors.New("connection refused")
+		},
+	}}
+	start := time.Date(2026, 6, 14, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+
+	if err := Metrics(context.Background(), nil, store, start, end, metrics, fastConfig()); err == nil {
+		t.Error("want an error when every fetch failed, got nil")
+	}
+	if last, _ := store.GetSyncLog("last_sync_date"); last != "" {
+		t.Errorf("last_sync_date: want unset after a failed run, got %q", last)
+	}
+}
+
+// One blip among good fetches is not a failed run. The next hourly sync picks
+// it up, and failing here would alert on something that fixes itself.
+func TestMetricsToleratesAPartialFailure(t *testing.T) {
+	store := newTestDB(t)
+	metrics := []Metric{
+		{Name: "ok", Fetch: func(_ context.Context, _ *garmin.Client, _ string) (json.RawMessage, error) {
+			return json.RawMessage(`{"ok":true}`), nil
+		}},
+		{Name: "flaky", Fetch: func(_ context.Context, _ *garmin.Client, _ string) (json.RawMessage, error) {
+			return nil, errors.New("connection reset")
+		}},
+	}
+	day := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+
+	if err := Metrics(context.Background(), nil, store, day, day, metrics, fastConfig()); err != nil {
+		t.Errorf("want nil with one metric fetched, got %v", err)
 	}
 }
 

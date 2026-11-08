@@ -57,7 +57,9 @@ func (c *Client) Get(ctx context.Context, path string, params url.Values) (json.
 		// Attempt token refresh once on auth failure
 		refreshed, refreshErr := RefreshDIToken(ctx, c.tokens)
 		if refreshErr != nil {
-			return nil, fmt.Errorf("token refresh failed: %w (original: %v)", refreshErr, err)
+			// Both wrapped: callers stop on ErrInvalidCredentials, and the
+			// refresh error alone doesn't carry it.
+			return nil, fmt.Errorf("token refresh failed: %w (original: %w)", refreshErr, err)
 		}
 		c.tokens = refreshed
 		c.tokenUpdated = true

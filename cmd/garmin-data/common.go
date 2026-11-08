@@ -34,6 +34,23 @@ func garminTokenDir() (string, error) {
 	return garmin.DefaultTokenDir()
 }
 
+// saveRefreshedTokens persists the client's tokens if a request refreshed them.
+// Call it before acting on a sync error: Garmin rotates the refresh token, so a
+// run that refreshed and then failed would leave the next run holding a dead one.
+func saveRefreshedTokens(client *garmin.Client) error {
+	if !client.TokensUpdated() {
+		return nil
+	}
+	tokenDir, err := garminTokenDir()
+	if err != nil {
+		return fmt.Errorf("locate token dir: %w", err)
+	}
+	if err := client.Tokens().Save(tokenDir); err != nil {
+		return fmt.Errorf("save refreshed tokens: %w", err)
+	}
+	return nil
+}
+
 func loadGarminClient() (*garmin.Client, error) {
 	dir, err := garminTokenDir()
 	if err != nil {

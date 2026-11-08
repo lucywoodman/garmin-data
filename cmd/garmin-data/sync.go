@@ -57,22 +57,15 @@ var syncCmd = &cobra.Command{
 		defer store.Close()
 
 		fmt.Printf("Syncing %s to %s...\n", start.Format(dateLayout), end.Format(dateLayout))
-		if err := sync.Metrics(cmd.Context(), client, store, start, end, metrics, sync.DefaultConfig()); err != nil {
+		syncErr := sync.Metrics(cmd.Context(), client, store, start, end, metrics, sync.DefaultConfig())
+		if syncErr == nil {
+			syncErr = sync.Activities(cmd.Context(), client, store, start, end, sync.DefaultConfig())
+		}
+		if err := saveRefreshedTokens(client); err != nil {
 			return err
 		}
-		if err := sync.Activities(cmd.Context(), client, store, start, end, sync.DefaultConfig()); err != nil {
-			return err
-		}
-
-		// Save tokens if they were refreshed during sync
-		if client.TokensUpdated() {
-			tokenDir, err := garminTokenDir()
-			if err != nil {
-				return fmt.Errorf("locate token dir: %w", err)
-			}
-			if err := client.Tokens().Save(tokenDir); err != nil {
-				return fmt.Errorf("save refreshed tokens: %w", err)
-			}
+		if syncErr != nil {
+			return syncErr
 		}
 
 		recs, _ := store.RecordCount()

@@ -70,7 +70,13 @@ func MetricsByName(names []string) ([]Metric, error) {
 	return out, nil
 }
 
+// Metrics fetches each metric for each date and stores it. A failed fetch is
+// logged and skipped, since one blip shouldn't cost the rest of the range —
+// but an auth failure stops the run, and so does a run that fetched nothing.
+// Either way exiting 0 would make a sync that has stopped working look like
+// one that hasn't.
 func Metrics(ctx context.Context, c *garmin.Client, store *db.DB, start, end time.Time, metrics []Metric, cfg Config) error {
+	fetched, failed := 0, 0
 	for current := start; !current.After(end); current = current.AddDate(0, 0, 1) {
 		dateStr := current.Format("2006-01-02")
 		cfg.Logger("Syncing %s...", dateStr)
@@ -81,14 +87,24 @@ func Metrics(ctx context.Context, c *garmin.Client, store *db.DB, start, end tim
 				}
 			}
 			data, err := fetchWithRetry(ctx, m.Fetch, c, dateStr, cfg)
+			if errors.Is(err, garmin.ErrInvalidCredentials) {
+				// Not always a dead login: a blip during the token refresh
+				// lands here too, and the next run will retry it.
+				return fmt.Errorf("%s for %s: %w (if this persists, run `garmin-data login`)", m.Name, dateStr, err)
+			}
 			if err != nil {
 				cfg.Logger("Warning: skipped %s for %s (%v)", m.Name, dateStr, err)
+				failed++
 				continue
 			}
 			if err := store.Upsert(dateStr, m.Name, json.RawMessage(data)); err != nil {
 				return fmt.Errorf("upsert %s/%s: %w", dateStr, m.Name, err)
 			}
+			fetched++
 		}
+	}
+	if fetched == 0 && failed > 0 {
+		return fmt.Errorf("all %d fetches failed; see warnings above", failed)
 	}
 	return store.SetSyncLog("last_sync_date", end.Format("2006-01-02"))
 }
