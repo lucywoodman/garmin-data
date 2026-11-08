@@ -114,4 +114,3 @@ func (c *Client) ActivitiesByDate(ctx context.Context, start, end string) ([]jso
 	}
 	return all, nil
 }
-

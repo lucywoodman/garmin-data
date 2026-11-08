@@ -221,11 +221,11 @@ func TestMetricsToleratesAPartialFailure(t *testing.T) {
 
 func TestParseActivityDate(t *testing.T) {
 	cases := map[string]string{
-		"2026-06-15 09:30:00":           "2026-06-15",
-		"2026-06-15 09:30:00.0":         "2026-06-15",
-		"":                              "",
-		"not-a-date":                    "",
-		"2026-06-15":                    "",
+		"2026-06-15 09:30:00":   "2026-06-15",
+		"2026-06-15 09:30:00.0": "2026-06-15",
+		"":                      "",
+		"not-a-date":            "",
+		"2026-06-15":            "",
 	}
 	for in, want := range cases {
 		if got := parseActivityDate(in); got != want {
