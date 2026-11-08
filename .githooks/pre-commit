@@ -1,0 +1,20 @@
+#!/bin/sh
+# Rejects the commit if any staged Go file isn't gofmt-clean.
+# Enable with: git config core.hooksPath .githooks
+
+unformatted=""
+for file in $(git diff --cached --name-only --diff-filter=ACMR -- '*.go'); do
+	# Check the staged blob, not the working tree, so partial staging can't slip through.
+	if [ -n "$(git show ":$file" | gofmt -l)" ]; then
+		unformatted="$unformatted $file"
+	fi
+done
+
+if [ -n "$unformatted" ]; then
+	echo "gofmt: these staged files need formatting:" >&2
+	for file in $unformatted; do
+		echo "  $file" >&2
+	done
+	echo "Run: gofmt -w$unformatted && git add$unformatted" >&2
+	exit 1
+fi

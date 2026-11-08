@@ -21,6 +21,14 @@ go build -o garmin-data ./cmd/garmin-data
 sudo mv garmin-data /usr/local/bin/  # Optional: install globally
 ```
 
+### Development
+
+Enable the pre-commit hook, which rejects commits with unformatted Go files:
+
+```bash
+git config core.hooksPath .githooks
+```
+
 ## Usage
 
 ### Login
